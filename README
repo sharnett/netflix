@@ -5,6 +5,8 @@ g++ funk.cpp
 
 This will load all the text files each time, haven't bothered to write the binary data stuff yet.
 
+This is the code from http://www.timelydevelopment.com/demos/NetflixPrize.aspx very hastily modified to work in unix.
+
 
 PYTHON:
 edit path variable in load_bs.py and stoch_grad_desc.py to point to the right place
