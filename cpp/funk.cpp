@@ -5,6 +5,8 @@
 #include <map>
 #include <string>
 #include <string.h>
+#include <vector>
+#include <algorithm>
 using namespace std;
 
 //===================================================================
@@ -12,15 +14,22 @@ using namespace std;
 // Constants and Type Declarations
 //
 //===================================================================
+//const char *TRAINING_PATH = "/Users/srharnett/Downloads/download/training_set/";
+//const char *TRAINING_FILE = "/Users/srharnett/Downloads/download/training_set/%s";
 const char *TRAINING_PATH = "/home/sean/Documents/download/training_set/";
 const char *TRAINING_FILE = "/home/sean/Documents/download/training_set/%s";
+const char *TEST_PATH = "/home/sean/Documents/download/%s";
+const char *PREDICTION_FILE = "/home/sean/Documents/download/prediction.txt";
 
 #define MAX_RATINGS     100480508     // Ratings in entire training set (+1)
 #define MAX_CUSTOMERS   480190        // Customers in the entire training set (+1)
 #define MAX_MOVIES      17771         // Movies in the entire training set (+1)
-#define MAX_FEATURES    64            // Number of features to use 
-#define MIN_EPOCHS      120           // Minimum number of epochs per feature
-#define MAX_EPOCHS      200           // Max epochs per feature
+#define MAX_FEATURES    2            // Number of features to use 
+#define MIN_EPOCHS      5           // Minimum number of epochs per feature
+#define MAX_EPOCHS      15           // Max epochs per feature
+//#define MAX_FEATURES    64            // Number of features to use 
+//#define MIN_EPOCHS      120           // Minimum number of epochs per feature
+//#define MAX_EPOCHS      200           // Max epochs per feature
 
 #define MIN_IMPROVEMENT 0.0001        // Minimum improvement required to continue current feature
 #define INIT            0.1           // Initialization value for features
@@ -39,6 +48,15 @@ struct Movie
     double      PseudoAvg;            // Weighted average used to deal with small movie counts 
 };
 
+struct MovieRating {
+    short movie;
+    BYTE rating;
+};
+
+bool sort_by_rating(const MovieRating& x, const MovieRating& y) {
+    return (x.rating <= y.rating);
+}
+
 struct Customer
 {
     int         CustomerId;
@@ -54,11 +72,19 @@ struct Data
     float       Cache;
 };
 
+struct Record {
+    short counts[5];
+    short *movies;
+};
+
+
 class Engine 
 {
 private:
     int             m_nRatingCount;                                 // Current number of loaded ratings
     Data            m_aRatings[MAX_RATINGS];                        // Array of ratings data
+    Record          records[MAX_CUSTOMERS];                    // Array of customer metrics
+    short           special_movies[MAX_RATINGS];
     Movie           m_aMovies[MAX_MOVIES];                          // Array of movie metrics
     Customer        m_aCustomers[MAX_CUSTOMERS];                    // Array of customer metrics
     float           m_aMovieFeatures[MAX_FEATURES][MAX_MOVIES];     // Array of features by movie (using floats to save space)
@@ -75,7 +101,13 @@ public:
     void            CalcMetrics();
     void            CalcFeatures();
     void            LoadHistory();
-//    void            ProcessTest(string pwzFile);
+    void            LoadHistory2();
+    void            DumpHistory2();
+    void            DumpBinary();
+    void            DumpBinary2();
+    void            LoadBinary();
+    void            LoadBinary2();
+    void            ProcessTest(char *pwzFile);
     void            ProcessFile(char *pwzFile);
 };
 
@@ -89,10 +121,16 @@ int main(int argc, char **argv)
 {
     Engine* engine = new Engine();
 
-    engine->LoadHistory();
-    engine->CalcMetrics();
+//    engine->LoadHistory();
+//    engine->CalcMetrics();
+//    engine->DumpBinary();
+//    engine->LoadBinary();
+//    engine->LoadHistory2();
+//    engine->DumpBinary2();
+    engine->LoadBinary2();
+    //engine->DumpHistory2();
     engine->CalcFeatures();
-//    engine->ProcessTest("qualifying.txt");
+    engine->ProcessTest("qualifying.txt");
 
     cout << "Done" << endl;
     getchar();
@@ -191,11 +229,14 @@ void Engine::CalcMetrics()
 //
 void Engine::CalcFeatures()
 {
-    int f, e, i, custId, cnt = 0;
+    int f, e, i, cnt = 0;
     Data* rating;
     double err, p, sq, rmse_last, rmse = 2.0;
-    short movieId;
+    short movie;
     float cf, mf;
+
+    short *counts;
+    short *movies;
 
     for (f=0; f<MAX_FEATURES; f++)
     {
@@ -212,7 +253,25 @@ void Engine::CalcFeatures()
             time_t start,end;
             double dif;
             time(&start);
-            for (i=0; i<m_nRatingCount; i++) {
+
+            for (int user=1; user<MAX_CUSTOMERS; user++) {
+                counts = records[user].counts;
+                movies = records[user].movies;
+                int k = 0;
+                for (int i=0; i<5; i++) {
+                    for (int j=0; j<counts[i]; j++) {
+                        movie = movies[j+k];
+                        p = PredictRating(movie, user, f, 0, true);
+                        err = (1.0*(i+1) - p);
+                        sq += err*err;
+                        cf = m_aCustFeatures[f][user];
+                        mf = m_aMovieFeatures[f][movie];
+                        m_aCustFeatures[f][user] += (float)(LRATE * (err * mf - K * cf));
+                        m_aMovieFeatures[f][movie] += (float)(LRATE * (err * cf - K * mf));
+                    }
+                }
+            }
+/*            for (i=0; i<m_nRatingCount; i++) {
                 rating = m_aRatings + i;
                 movieId = rating->MovieId;
                 custId = rating->CustId;
@@ -230,8 +289,10 @@ void Engine::CalcFeatures()
                 m_aCustFeatures[f][custId] += (float)(LRATE * (err * mf - K * cf));
                 m_aMovieFeatures[f][movieId] += (float)(LRATE * (err * cf - K * mf));
             }
+*/
             
-            rmse = sqrt(sq/m_nRatingCount);
+            rmse = sqrt(sq/(MAX_RATINGS -1));
+            //rmse = sqrt(sq/m_nRatingCount);
                   
             time(&end);
             dif = difftime (end,start);
@@ -239,12 +300,33 @@ void Engine::CalcFeatures()
             //printf("     <set x='%d' y='%f' />\n",cnt,rmse);
         }
 
+        sq = 0;
+        for (int user=1; user<MAX_CUSTOMERS; user++) {
+            counts = records[user].counts;
+            movies = records[user].movies;
+            int k = 0;
+            for (int i=0; i<5; i++) {
+                for (int j=0; j<counts[i]; j++) {
+                    movie = movies[j+k];
+                    p = PredictRating(movie, user, f, 0, true);
+                    err = (1.0*(i+1) - p);
+                    sq += err*err;
+                    cf = m_aCustFeatures[f][user];
+                    mf = m_aMovieFeatures[f][movie];
+                    m_aCustFeatures[f][user] += (float)(LRATE * (err * mf - K * cf));
+                    m_aMovieFeatures[f][movie] += (float)(LRATE * (err * cf - K * mf));
+                }
+            }
+        }
+        rmse = sqrt(sq/(MAX_RATINGS -1));
+        cout << "final score: " << rmse << endl;
+
         // Cache off old predictions
-        for (i=0; i<m_nRatingCount; i++)
-        {
-            rating = m_aRatings + i;
-            rating->Cache = (float)PredictRating(rating->MovieId, rating->CustId, f, rating->Cache, false);
-        }            
+        //for (i=0; i<m_nRatingCount; i++)
+        //{
+        //    rating = m_aRatings + i;
+        //    rating->Cache = (float)PredictRating(rating->MovieId, rating->CustId, f, rating->Cache, false);
+        //}            
     }
 }
 
@@ -303,10 +385,111 @@ double Engine::PredictRating(short movieId, int custId)
 // - Loop through all of the files in the training directory
 //
 void Engine::LoadHistory() {
+//    for (int i = 1; i < 100; i++) {
     for (int i = 1; i < MAX_MOVIES; i++) {
         char data_file[100];
         sprintf(data_file, "%smv_00%05d.txt", TRAINING_PATH, i);
         this->ProcessFile(data_file);
+    }
+}
+
+void Engine::DumpBinary() {
+    FILE* f = fopen("binary.txt", "w");
+    fwrite(m_aRatings, sizeof(Data), m_nRatingCount, f);
+    fclose(f);
+}
+
+void Engine::DumpBinary2() {
+    FILE* f = fopen("special1.bin", "w");
+    fwrite(records, sizeof(Record), MAX_CUSTOMERS, f);
+    fclose(f);
+    f = fopen("special2.bin", "w");
+    fwrite(special_movies, sizeof(short), MAX_RATINGS-1, f);
+    fclose(f);
+}
+
+void Engine::LoadBinary2() {
+    int user = 0;
+    FILE* f = fopen("special1.bin", "r");
+    while(fread(&records[user], sizeof(Record), 1, f))
+        user++;
+    fclose(f);
+    int n = 0;
+    f = fopen("special2.bin", "r");
+    while (fread(&special_movies[n], sizeof(short), 1, f))
+        n++;
+    fclose(f);
+
+    ptrdiff_t d = special_movies - records[1].movies;
+    for (int i=1; i<user; i++)
+        records[i].movies += d;
+}
+
+void Engine::LoadBinary() {
+    FILE* f = fopen("binary.txt", "r");
+    // should be able to do this all in one shot, no loop
+    // couldnt figure it out
+    while(fread(&m_aRatings[m_nRatingCount], sizeof(Data), 1, f) == 1)
+        m_nRatingCount++;
+    fclose(f);
+}
+
+void Engine::DumpHistory2() {
+    FILE *f = fopen("special.txt", "w");
+    short *counts;
+    int total;
+    for (int user = 1; user < MAX_CUSTOMERS; user++) {
+        counts = records[user].counts;
+        fprintf(f, "%d %d %d %d %d %d ", user, counts[0], counts[1], counts[2], counts[3], counts[4]);
+        total = 0;
+        for (int i=0; i<5; i++) 
+            total += counts[i];
+        for (int i=0; i<total; i++)
+            fprintf(f, "%d ", records[user].movies[i]);
+        fprintf(f, "\n");
+    }
+    fclose(f);
+}
+
+void Engine::LoadHistory2() {
+    cout << "making silly new data structure" << endl;
+    Data* rating;
+    BYTE value;
+    int user;
+    short movie;
+    // determine how much space the movies list needs for each record
+    for (int i=0; i<m_nRatingCount; i++) {
+        rating = m_aRatings + i;
+        user = rating->CustId;
+        value = rating->Rating;
+        records[user].counts[value-1]++;
+    }
+
+    int total = 0;
+    records[1].movies = special_movies;
+    // give the movie list its space
+    for (user = 1; user < MAX_CUSTOMERS-1; user++) {
+        for (int i=0; i<5; i++) 
+            total += records[user].counts[i];
+        records[user+1].movies = special_movies + total;
+    }
+
+    cout << "building lists of movies for each user" << endl;
+    vector< vector<MovieRating> > temp_ratings(MAX_CUSTOMERS);
+    for (int i=0; i<m_nRatingCount; i++) {
+        rating = m_aRatings + i;
+        movie = rating->MovieId;
+        user = rating->CustId;
+        MovieRating m;
+        m.movie = movie;
+        m.rating = rating->Rating;
+        temp_ratings[user].push_back(m);
+    }
+    cout << "sorting" << endl;
+    for (user = 1; user < MAX_CUSTOMERS; user++) {
+        stable_sort(temp_ratings[user].begin(), temp_ratings[user].end(), sort_by_rating);
+        for (int i=0; i<temp_ratings[user].size(); i++) 
+            records[user].movies[i] = temp_ratings[user][i].movie;
     }
 }
 
@@ -328,7 +511,7 @@ void Engine::ProcessFile(char *pwzBuffer)
 
     if ((stream = fopen(pwzBuffer, "r")) == NULL) {
         cout << "error opening " << pwzBuffer << endl;
-        return;
+        exit(1);
     }
 
     // First line is the movie id
@@ -360,43 +543,25 @@ void Engine::ProcessFile(char *pwzBuffer)
     fclose( stream );
 }
 
-//
-// ProcessTest
-// - Load a sample set in the following format
-//
-//   <Movie1Id>:
-//   <CustomerId>
-//   <CustomerId>
-//   ...
-//   <Movie2Id>:
-//   <CustomerId>
-//
-// - And write results:
-//
-//   <Movie1Id>:
-//   <Rating>
-//   <Raing>
-//   ...
-/*
-void Engine::ProcessTest(string pwzFile)
-{
+
+void Engine::ProcessTest(char *pwzFile) {
     FILE *streamIn, *streamOut;
-    string pwzBuffer;
+    char pwzBuffer[1000];
     int custId, movieId, pos = 0;
     double rating;
     bool bMovieRow;
 
     sprintf(pwzBuffer, TEST_PATH, pwzFile);
-    printf(L"\n\nProcessing test: %s\n", pwzBuffer);
+    printf("\n\nProcessing test: %s\n", pwzBuffer);
 
-    if (_wfopen_s(&streamIn, pwzBuffer, L"r") != 0) return;
-    if (_wfopen_s(&streamOut, PREDICTION_FILE, L"w") != 0) return;
+    if ((streamIn = fopen(pwzBuffer, "r")) != 0) return;
+    if ((streamOut = fopen(PREDICTION_FILE, "w")) != 0) return;
 
-    fgetws(pwzBuffer, 1000, streamIn);
+    fgets(pwzBuffer, 1000, streamIn);
     while ( !feof( streamIn ) )
     {
         bMovieRow = false;
-        for (int i=0; i<(int)wcslen(pwzBuffer); i++)
+        for (int i=0; i<(int)strlen(pwzBuffer); i++)
         {
             bMovieRow |= (pwzBuffer[i] == 58); 
         }
@@ -404,27 +569,29 @@ void Engine::ProcessTest(string pwzFile)
         pos = 0;
         if (bMovieRow)
         {
-            ParseInt(pwzBuffer, (int)wcslen(pwzBuffer), pos, movieId);
+            //ParseInt(pwzBuffer, (int)strlen(pwzBuffer), pos, movieId);
+            movieId = atoi(pwzBuffer);
 
             // Write same row to results
-            fputws(pwzBuffer,streamOut); 
+            fputs(pwzBuffer,streamOut); 
         }
         else
         {
-            ParseInt(pwzBuffer, (int)wcslen(pwzBuffer), pos, custId);
+            //ParseInt(pwzBuffer, (int)wcslen(pwzBuffer), pos, custId);
+            custId = atoi(pwzBuffer);
             custId = m_mCustIds[custId];
             rating = PredictRating(movieId, custId);
 
             // Write predicted value
-            sprintf(pwzBuffer,1000,L"%5.3f\n",rating);
-            fputws(pwzBuffer,streamOut);
+            sprintf(pwzBuffer,"%5.3f\n",rating);
+            fputs(pwzBuffer,streamOut);
         }
 
         //wprintf(L"Got Line: %d %d %d \n", movieId, custId, rating);
-        fgetws(pwzBuffer, 1000, streamIn);
+        fgets(pwzBuffer, 1000, streamIn);
     }
 
     // Cleanup
     fclose( streamIn );
     fclose( streamOut );
-} */
+}
