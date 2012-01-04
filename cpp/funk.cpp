@@ -27,6 +27,8 @@ void allocate_feature_matrices();
 
 int main(int argc, char **argv) {
     Data *ratings = new Data[100480507];
+//    int num_ratings = LoadHistory(ratings);
+//    DumpBinary(ratings, num_ratings);
     int num_ratings = LoadBinary(ratings); 
     allocate_feature_matrices();
 
