@@ -1,28 +1,6 @@
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <map>
+#include "load.h"
 
 using namespace std;
-
-typedef unsigned char BYTE;
-
-struct Data {
-    int user;
-    short movie;
-    BYTE rating;
-//    float Cache;
-};
-
-int LoadHistory(Data *ratings);
-void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_map);
-void DumpBinary(Data *ratings, int num_ratings);
-int LoadBinary(Data *ratings);
-string get_data_folder();
 
 int LoadHistory(Data *ratings) {
     time_t start,end; time(&start);
@@ -86,18 +64,20 @@ void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, i
     fclose(stream);
 }
 
-void DumpBinary(Data *ratings, int num_ratings) {
-    string filename = get_data_folder() + "cpp/binary.txt";
-    FILE* f = fopen(filename.c_str(), "w");
+void DumpBinary(Data *ratings, int num_ratings, string filename) {
+    string filepath = get_data_folder() + filename;
+    cout << filepath << endl;
+    FILE* f = fopen(filepath.c_str(), "w");
     fwrite(ratings, sizeof(Data), num_ratings, f);
     fclose(f);
 }
 
-int LoadBinary(Data *ratings) {
-    string filename = get_data_folder() + "cpp/binary.txt";
-    FILE* f = fopen(filename.c_str(), "r");
+int LoadBinary(Data *ratings, string filename) {
+    string filepath = get_data_folder() + filename;
+    FILE* f = fopen(filepath.c_str(), "r");
     int num_ratings = fread(ratings, sizeof(Data), 100480507, f);
     fclose(f);
+    cout << num_ratings << " ratings loaded" << endl;
     return num_ratings;
 }
 

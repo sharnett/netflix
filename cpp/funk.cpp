@@ -1,11 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
-#include <math.h>
+#include <cmath>
 #include <algorithm>
-#include <map>
-#include <string>
-#include <string.h>
 #include "load.h"
 
 using namespace std;
@@ -13,48 +7,35 @@ using namespace std;
 const int MAX_CUSTOMERS = 480190;        // Customers in the entire training set (+1)
 const int MAX_MOVIES = 17771;         // Movies in the entire training set (+1)
 
-const int MAX_FEATURES = 5;            // Number of features to use 
+int MAX_FEATURES = 5;            // Number of features to use 
 double MIN_IMPROVEMENT = 0.01;        // Minimum improvement required to continue current feature
 int MIN_EPOCHS = 5;           // Minimum number of epochs per feature
-int MAX_EPOCHS = 100;           // Max epochs per feature
+int MAX_EPOCHS = 20;           // Max epochs per feature
 const double INIT = 0.1;           // Initialization value for features
 const double LRATE = 0.001;         // Learning rate parameter
 const double K = 0.015;         // Regularization parameter used to minimize over-fitting
 
-float MovieFeatures[MAX_FEATURES][MAX_MOVIES];
-float CustFeatures[MAX_FEATURES][MAX_CUSTOMERS];
-
-typedef unsigned char BYTE;
+float *MovieFeatures[MAX_MOVIES];
+float *CustFeatures[MAX_CUSTOMERS];
 
 inline double PredictRating(short movieId, int custId, int feature, float cache, bool bTrailing=true);
 inline double PredictRating(short movieId, int custId);
 void CalcFeatures(Data *ratings, int num_ratings);
 Data *sample(Data *ratings, int sample_size, int num_ratings);
 double cost(Data *ratings, int num_ratings);
+void allocate_feature_matrices();
 
 int main(int argc, char **argv) {
     Data *ratings = new Data[100480507];
-    cout << "loading data..." << endl;
     int num_ratings = LoadBinary(ratings); 
-    cout << num_ratings << " ratings loaded" << endl;
-    for (int f=0; f<MAX_FEATURES; f++) {
-        for (int i=0; i<MAX_MOVIES; i++) MovieFeatures[f][i] = (float)INIT;
-        for (int i=0; i<MAX_CUSTOMERS; i++) CustFeatures[f][i] = (float)INIT;
-    }
-//    cout << "trying to shuffle..." << endl;
-//    random_shuffle(&ratings[0], &ratings[num_ratings]);
-//    for (int i=0; i<10; i++)
-//        cout << ratings[i].user << " " << ratings[i].movie << " " << (int)ratings[i].rating << endl;
-//    cout << "trying to sample 1000000..." << endl;
-    int sample_size = 30200000;
-    int cv_size = 200000;
+    allocate_feature_matrices();
+
+    int sample_size = 1200000, cv_size = 200000;
+    int train_size = sample_size - cv_size;
     Data *cv_ratings = sample(ratings, sample_size, num_ratings);
-    ratings = cv_ratings + cv_size;
-    num_ratings = sample_size - cv_size;
-//    for (int i=0; i<10; i++)
-//        cout << ratings[i].user << " " << ratings[i].movie << " " << (int)ratings[i].rating << endl;
-    CalcFeatures(ratings, num_ratings);
-    cout << "training cost: " << cost(ratings, num_ratings) << endl;
+    Data *train_ratings = cv_ratings + cv_size;
+    CalcFeatures(train_ratings, train_size);
+    cout << "training cost: " << cost(train_ratings, train_size) << endl;
     cout << "cross validate cost: " << cost(cv_ratings, cv_size) << endl;
     return 0;
 }
@@ -87,12 +68,12 @@ void CalcFeatures(Data *ratings, int num_ratings) {
                 sq += err*err;
                 
                 // Cache off old feature values
-                cf = CustFeatures[f][custId];
-                mf = MovieFeatures[f][movieId];
+                cf = CustFeatures[custId][f];
+                mf = MovieFeatures[movieId][f];
 
                 // Cross-train the features
-                CustFeatures[f][custId] += (float)(LRATE * (err * mf - K * cf));
-                MovieFeatures[f][movieId] += (float)(LRATE * (err * cf - K * mf));
+                CustFeatures[custId][f] += (float)(LRATE * (err * mf - K * cf));
+                MovieFeatures[movieId][f] += (float)(LRATE * (err * cf - K * mf));
             }
             rmse = sqrt(sq/num_ratings);
             cout << cnt << " " << rmse << endl;
@@ -112,7 +93,7 @@ double PredictRating(short movieId, int custId, int feature, float cache, bool b
     double sum = (cache > 0) ? cache : 1; //m_aMovies[movieId].PseudoAvg; 
 
     // Add contribution of current feature
-    sum += MovieFeatures[feature][movieId] * CustFeatures[feature][custId];
+    sum += MovieFeatures[movieId][feature] * CustFeatures[custId][feature];
     if (sum > 5) sum = 5;
     if (sum < 1) sum = 1;
 
@@ -136,7 +117,7 @@ double PredictRating(short movieId, int custId) {
 
     for (int f=0; f<MAX_FEATURES; f++) 
     {
-        sum += MovieFeatures[f][movieId] * CustFeatures[f][custId];
+        sum += MovieFeatures[movieId][f] * CustFeatures[custId][f];
         if (sum > 5) sum = 5;
         if (sum < 1) sum = 1;
     }
@@ -168,4 +149,14 @@ double cost(Data *ratings, int num_ratings) {
         sq += err*err;
     }
     return sqrt(sq/num_ratings);
+}
+
+void allocate_feature_matrices() {
+    int i;
+    for (i=0; i<MAX_MOVIES; i++) MovieFeatures[i] = new float(MAX_FEATURES);
+    for (i=0; i<MAX_CUSTOMERS; i++) CustFeatures[i] = new float(MAX_FEATURES);
+    for (int f=0; f<MAX_FEATURES; f++) {
+        for (i=0; i<MAX_MOVIES; i++) MovieFeatures[i][f] = (float)INIT;
+        for (i=0; i<MAX_CUSTOMERS; i++) CustFeatures[i][f] = (float)INIT;
+    }
 }

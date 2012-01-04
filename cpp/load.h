@@ -19,6 +19,6 @@ struct Data {
 
 int LoadHistory(Data *ratings);
 void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_map);
-void DumpBinary(Data *ratings, int num_ratings);
-int LoadBinary(Data *ratings);
+void DumpBinary(Data *ratings, int num_ratings, string filename = "cpp/binary.txt");
+int LoadBinary(Data *ratings, string filename = "cpp/binary.txt");
 string get_data_folder();
