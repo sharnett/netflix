@@ -4,11 +4,12 @@ CXXFLAGS = -g -Wall $(INCLUDES)
 LDFLAGS = -g
 LDLIBS = 
 
-funk: load.o 
+funk: load.o optimizers.o predictor.o
+create_binaries: load.o
 
 .PHONY: clean
 clean:
-	rm -f *.o *~ a.out core funk
+	rm -f *.o *~ a.out core funk create_binaries
 
 .PHONY: all
-all: clean funk
+all: clean create_binaries funk

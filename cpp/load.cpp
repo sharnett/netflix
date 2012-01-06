@@ -2,7 +2,7 @@
 
 using namespace std;
 
-const int MAX_MOVIES = 17770;
+extern const int MAX_MOVIES;         // Movies in the entire training set (+1)
 
 int LoadHistory(Data *ratings) {
     time_t start,end; time(&start);
@@ -10,7 +10,7 @@ int LoadHistory(Data *ratings) {
     char data_file[100];
     int num_ratings = 0;
     map<int, int> user_map; // Map for one time translation of ids to compact array index
-    for (int i = 1; i <= MAX_MOVIES; i++) {
+    for (int i = 1; i < MAX_MOVIES; i++) {
         sprintf(data_file, "%smv_00%05d.txt", data_folder.c_str(), i);
         ProcessFile(data_file, ratings, num_ratings, user_map);
     }
@@ -70,13 +70,22 @@ void DumpBinary(Data *ratings, int num_ratings, string filename) {
     string filepath = get_data_folder() + filename;
     cout << "dumping to " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "w");
-    fwrite(ratings, sizeof(Data), num_ratings, f);
+    int n = fwrite(ratings, sizeof(Data), num_ratings, f);
+    if (n != num_ratings) {
+        cout << "error dumping main binary" << endl;
+        exit(1);
+    }
     fclose(f);
 }
 
 int LoadBinary(Data *ratings, string filename) {
     string filepath = get_data_folder() + filename;
+    cout << "trying to load " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "r");
+    if (!f) {
+        cout << "error reading " << filepath << endl;
+        exit(1);
+    }
     int num_ratings = fread(ratings, sizeof(Data), 100480507, f);
     fclose(f);
     cout << num_ratings << " ratings loaded" << endl;
@@ -85,15 +94,20 @@ int LoadBinary(Data *ratings, string filename) {
 
 void load_avg(float *movie_avg) {
     string filepath = get_data_folder() + "cpp/movie_avg.txt";
+    cout << "trying to load " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "r");
-    int num_movies = fread(movie_avg, sizeof(float), MAX_MOVIES+1, f);
+    if (!f) {
+        cout << "error reading " << filepath << endl;
+        exit(1);
+    }
+    int num_movies = fread(movie_avg, sizeof(float), MAX_MOVIES, f);
     fclose(f);
     cout << num_movies << " movie averages loaded" << endl;
 }
 
 void dump_avg(Data *ratings, int num_ratings) {
-    float avg[MAX_MOVIES+1] = {0}; // movie IDs start at 0, so need an extra one
-    int count[MAX_MOVIES+1] = {0};
+    float avg[MAX_MOVIES] = {0}; // movie IDs start at 0, so need an extra one
+    int count[MAX_MOVIES] = {0};
     Data *rating;
     for (int i=0; i<num_ratings; i++) {
         rating = ratings + i;
@@ -106,7 +120,11 @@ void dump_avg(Data *ratings, int num_ratings) {
     string filepath = get_data_folder() + "cpp/movie_avg.txt";
     cout << "dumping to " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "w");
-    fwrite(avg, sizeof(float), MAX_MOVIES+1, f);
+    int n = fwrite(avg, sizeof(float), MAX_MOVIES, f);
+    if (n != num_ratings) {
+        cout << "error dumping main binary" << endl;
+        exit(1);
+    }
     fclose(f);
 }
 
