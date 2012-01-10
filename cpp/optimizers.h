@@ -5,6 +5,6 @@
 
 void sgd(Predictor& p, Data *ratings, int num_ratings);
 void gd(Predictor& p, Data *ratings, int num_ratings);
-double compute_gradient(Data *ratings, int num_ratings, float *movie_gradient[MAX_MOVIES], float *user_gradient[MAX_USERS], Predictor& p);
+double compute_gradient(Predictor& p, Data *ratings, int num_ratings, float *movie_gradient, float *user_gradient);
 void set_defaults();
 #endif

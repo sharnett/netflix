@@ -4,18 +4,29 @@ using namespace std;
 
 extern const int MAX_MOVIES;         // Movies in the entire training set (+1)
 
-int LoadHistory(Data *ratings) {
+int LoadHistory(Data *ratings, bool dump_dict) {
     time_t start,end; time(&start);
     string data_folder = get_data_folder() + "training_set/";
     char data_file[100];
     int num_ratings = 0;
-    map<int, int> user_map; // Map for one time translation of ids to compact array index
+    map<int, int> user_dict; // Map for translation of ids to compact array index
     for (int i = 1; i < MAX_MOVIES; i++) {
         sprintf(data_file, "%smv_00%05d.txt", data_folder.c_str(), i);
-        ProcessFile(data_file, ratings, num_ratings, user_map);
+        ProcessFile(data_file, ratings, num_ratings, user_dict);
     }
     time(&end);
     cout << "time: " << difftime(end,start) << "s" << endl;
+
+    if (dump_dict) {
+        string dict_file = get_data_folder() + "cpp/user_dict.txt";
+        FILE *f = fopen(dict_file.c_str(), "w");
+        map<int, int>::iterator it;
+        for (it = user_dict.begin(); it != user_dict.end(); ++it) {
+            fwrite(&it->first, sizeof(int), 1, f);
+            fwrite(&it->second, sizeof(int), 1, f);
+        }
+        fclose(f);
+    }
     return num_ratings;
 }
 
@@ -23,7 +34,7 @@ int LoadHistory(Data *ratings) {
 //   <MovieId>:
 //   <CustomerId>,<Rating>
 //   <CustomerId>,<Rating>
-void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_map) {
+void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_dict) {
     cout << "Processing file: " << history_file << endl;
     FILE *stream;
     if ((stream = fopen(history_file, "r")) == NULL) {
@@ -54,10 +65,10 @@ void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, i
         temp = strtok(NULL, ",");
         datum->rating = (BYTE)atoi(temp);
 
-        itr = user_map.find(user);
-        if (itr == user_map.end()) {
-            cid = (int)user_map.size();
-            user_map[user] = cid;
+        itr = user_dict.find(user);
+        if (itr == user_dict.end()) {
+            cid = (int)user_dict.size();
+            user_dict[user] = cid;
         }
         else
             cid = itr->second;
@@ -121,11 +132,29 @@ void dump_avg(Data *ratings, int num_ratings) {
     cout << "dumping to " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "w");
     int n = fwrite(avg, sizeof(float), MAX_MOVIES, f);
-    if (n != num_ratings) {
-        cout << "error dumping main binary" << endl;
+    if (n != MAX_MOVIES) {
+        cout << "error dumping avgs binary" << endl;
         exit(1);
     }
     fclose(f);
+}
+
+void load_user_dict(map<int, int>& user_dict) {
+    string filepath = get_data_folder() + "cpp/user_dict.txt";
+    cout << "trying to load " << filepath << endl;
+    FILE* f = fopen(filepath.c_str(), "r");
+    if (!f) {
+        cout << "error reading " << filepath << endl;
+        exit(1);
+    }
+    int old_id, new_id, num_users = 0;
+    while(fread(&old_id, sizeof(int), 1, f)) {
+        fread(&new_id, sizeof(int), 1, f);
+        user_dict[old_id] = new_id;
+        num_users++;
+    }
+    fclose(f);
+    cout << num_users << " user ID mappings loaded" << endl;
 }
 
 string get_data_folder() {

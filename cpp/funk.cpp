@@ -9,6 +9,7 @@ using namespace boost;
 
 extern double MIN_IMPROVEMENT;        // Minimum improvement required to continue current feature
 extern int MAX_EPOCHS;           // Max epochs per feature
+extern double LRATE;         // Learning rate parameter
 
 extern const int MAX_USERS;        // users in the entire training set (+1)
 extern const int MAX_MOVIES;         // movies in the entire training set (+1)
@@ -17,6 +18,7 @@ extern const int MAX_RATINGS;
 static int num_features = 5;            // Number of features to use 
 static int sample_size = 1000000;
 static int cv_size = 200000;
+static bool method = 0; // 0 for sgd, 1 for reg gd
 
 Data *sample(Data *ratings, int sample_size, int num_ratings);
 double cost(Predictor& p, Data *ratings, int num_ratings);
@@ -34,7 +36,10 @@ int main(int argc, char **argv) {
     train_ratings = cv_ratings + cv_size;
     Predictor p(MAX_USERS, MAX_MOVIES, num_features);
 
-    gd(p, train_ratings, train_size);
+    if (method == 0)
+        sgd(p, train_ratings, train_size);
+    else
+        gd(p, train_ratings, train_size);
     cout << "training set cost: " << cost(p, train_ratings, train_size) << endl;
     cout << "cross validation set cost: " << cost(p, cv_ratings, cv_size) << endl;
 
@@ -83,5 +88,11 @@ void parse_args(int argc, char **argv) {
         if (sample_size <= 0) 
             sample_size = MAX_RATINGS;
         cv_size = sample_size/10;
+        cout << "enter 0 for sgd, 1 for reg grad desc: ";
+        cin >> method;
+        cout << "enter learning rate (0 for .001): ";
+        cin >> LRATE;
+        if (LRATE <= 0)
+            LRATE = .001;
     }
 }
