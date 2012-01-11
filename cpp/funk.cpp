@@ -100,7 +100,7 @@ Settings parse_args(int argc, char **argv) {
             cout << "only 0 or 1, silly" << endl;
             exit(1);
         }
-        cout << "enter learning rate (0 for ) " << s.lrate << "): ";
+        cout << "enter learning rate (0 for " << s.lrate << "): ";
         double temp; cin >> temp;
         if (temp > 0)
             s.lrate = temp;

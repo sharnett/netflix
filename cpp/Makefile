@@ -4,7 +4,11 @@ CXXFLAGS = -g -Wall $(INCLUDES)
 
 PROG = funk
 OBJS = funk.o load.o optimizers.o predictor.o globals.h
-BONUS = -framework Accelerate 
+UNAME := $(shell uname)
+BONUS = -lblas
+ifeq ($(UNAME), Darwin)
+	BONUS = -framework Accelerate 
+endif
 
 $(PROG): $(OBJS) 
 	$(CXX) $(CXXFLAGS) $(OBJS) $(BONUS) -o $(PROG)

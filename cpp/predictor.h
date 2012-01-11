@@ -1,7 +1,12 @@
 #ifndef predictor_H
 #define predictor_H
 
+#if defined __APPLE__
 #include <Accelerate/Accelerate.h> // Mac OS X specific, has BLAS headers
+#elif defined __linux__
+#include <cblas.h> //for linux
+#endif
+
 #include "load.h"
 
 class Predictor {
