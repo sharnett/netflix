@@ -1,8 +1,7 @@
 #ifndef predictor_H
 #define predictor_H
 
-#include <boost/random.hpp>
-#include <Accelerate/Accelerate.h>
+#include <Accelerate/Accelerate.h> // Mac OS X specific, has BLAS headers
 #include "load.h"
 
 class Predictor {
@@ -14,6 +13,7 @@ public:
     int get_num_movies() { return num_movies; }
     int get_num_features() { return num_features; }
 
+    // the real meat of the predictor
     float *movie_features;
     float *user_features;
 
@@ -24,6 +24,7 @@ private:
     float *movie_avg;
 };
 
+// worthless random number generator helper
 float rndn();
 
 #endif

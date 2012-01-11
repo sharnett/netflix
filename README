@@ -1,7 +1,9 @@
 TO RUN C++ VERSION:
 edit the file "data_folder.txt" to point to the netflix data folder
-make
-./funk
+make all
+./create_binaries
+./probe_bs
+./funk -i
 
 PYTHON:
 edit path variable in load_bs.py and stoch_grad_desc.py to point to the right place

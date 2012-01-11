@@ -1,12 +1,19 @@
 CXX = g++
-INCLUDES =
+INCLUDES = 
 CXXFLAGS = -g -Wall $(INCLUDES)
-LDFLAGS = -g -framework Accelerate
-LDLIBS = 
 
-funk: load.o optimizers.o predictor.o
-create_binaries: load.o
-probe_bs: load.o
+PROG = funk
+OBJS = funk.o load.o optimizers.o predictor.o globals.h
+BONUS = -framework Accelerate 
+
+$(PROG): $(OBJS) 
+	$(CXX) $(CXXFLAGS) $(OBJS) $(BONUS) -o $(PROG)
+create_binaries: load.o globals.h
+probe_bs: load.o  globals.h
+
+optimizers.o: optimizers.h globals.h
+predictor.o: predictor.h globals.h
+load.o: load.h globals.h
 
 .PHONY: clean
 clean:

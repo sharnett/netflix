@@ -1,3 +1,9 @@
+// probe_bs takes all the ratings from probe.txt and removes them from the original
+// data, leaving behind pure training data. the removed ratings are used as cross-
+// validation data
+//
+// the way I did this ended up being a larger PITA than expected
+
 #include <list>
 #include <algorithm>
 #include "load.h"
@@ -17,6 +23,8 @@ int main() {
     return 0;
 }
 
+// an array of lists, one list per movie, each list contains all the users
+// in probe.txt who rated that movie
 int get_probe_movies(list<int> probe_movies[]) {
     string probe_file = get_data_folder() + "probe.txt";
     cout << "trying to open " << probe_file << endl;
@@ -43,6 +51,7 @@ int get_probe_movies(list<int> probe_movies[]) {
     return i;
 }
 
+// convert the user IDs in the array of lists above to compact form
 void remap_probe_movies(list<int> probe_movies[], map<int, int> user_dict) {
     cout << "converting probe movie IDs to compact form..." << endl;
     list<int>::iterator it;
@@ -54,11 +63,13 @@ void remap_probe_movies(list<int> probe_movies[], map<int, int> user_dict) {
     }
 }
 
+// go through the main data structure and split off the ratings that were
+// in probe.txt to create two sets of data
 void split_train_and_cv_data(list<int> probe_movies[], int num_cv_ratings) {
     int num_ratings, num_train_ratings;
     Data *ratings, *train_ratings, *cv_ratings;
     ratings = new Data[MAX_RATINGS];
-    num_ratings = LoadBinary(ratings); 
+    num_ratings = load_binary(ratings); 
     num_train_ratings = num_ratings - num_cv_ratings;
     cv_ratings = new Data[num_cv_ratings];
     train_ratings = new Data[num_train_ratings];
@@ -109,8 +120,8 @@ void split_train_and_cv_data(list<int> probe_movies[], int num_cv_ratings) {
     delete [] ratings;
 
     // dump it all
-    DumpBinary(train_ratings, num_train_ratings, "cpp/train.bin");
-    DumpBinary(cv_ratings, num_cv_ratings, "cpp/cv.bin");
+    dump_binary(train_ratings, num_train_ratings, "cpp/train.bin");
+    dump_binary(cv_ratings, num_cv_ratings, "cpp/cv.bin");
     delete [] train_ratings;
     delete [] cv_ratings;
 }

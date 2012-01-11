@@ -4,19 +4,22 @@ using namespace std;
 
 extern const int MAX_MOVIES;         // Movies in the entire training set (+1)
 
-int LoadHistory(Data *ratings, bool dump_dict) {
+int load_history(Data *ratings, bool dump_dict) {
     time_t start,end; time(&start);
     string data_folder = get_data_folder() + "training_set/";
     char data_file[100];
     int num_ratings = 0;
-    map<int, int> user_dict; // Map for translation of ids to compact array index
+    map<int, int> user_dict; // map for translation of ids to compact array index
+
+    // loop through each movie and process the corresponding file
     for (int i = 1; i < MAX_MOVIES; i++) {
         sprintf(data_file, "%smv_00%05d.txt", data_folder.c_str(), i);
-        ProcessFile(data_file, ratings, num_ratings, user_dict);
+        process_file(data_file, ratings, num_ratings, user_dict);
     }
     time(&end);
     cout << "time: " << difftime(end,start) << "s" << endl;
 
+    // if needed, dump the user dictionary
     if (dump_dict) {
         string dict_file = get_data_folder() + "cpp/user_dict.txt";
         FILE *f = fopen(dict_file.c_str(), "w");
@@ -31,10 +34,10 @@ int LoadHistory(Data *ratings, bool dump_dict) {
 }
 
 // - Load a history file in the format:
-//   <MovieId>:
-//   <CustomerId>,<Rating>
-//   <CustomerId>,<Rating>
-void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_dict) {
+//   <movie>:
+//   <user>,<rating>
+//   <user>,<rating>
+void process_file(char *history_file, Data *ratings, int& num_ratings, map<int, int>& user_dict) {
     cout << "Processing file: " << history_file << endl;
     FILE *stream;
     if ((stream = fopen(history_file, "r")) == NULL) {
@@ -55,16 +58,17 @@ void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, i
     map<int, int>::iterator itr;
     int cid;
 
-    // Get all remaining rows
+    // get all remaining lines
     while (fgets(buf, 1000, stream)) {
         datum = &ratings[num_ratings++];
         datum->movie = movie;
-//        datum->Cache = 0;
         temp = strtok(buf, ",");
         user = atoi(temp);
         temp = strtok(NULL, ",");
         datum->rating = (BYTE)atoi(temp);
 
+        // if user is in the dictionary, grab the compact ID
+        // otherwise create a new compact ID and add to dictionary
         itr = user_dict.find(user);
         if (itr == user_dict.end()) {
             cid = (int)user_dict.size();
@@ -77,7 +81,7 @@ void ProcessFile(char *history_file, Data *ratings, int& num_ratings, map<int, i
     fclose(stream);
 }
 
-void DumpBinary(Data *ratings, int num_ratings, string filename) {
+void dump_binary(Data *ratings, int num_ratings, string filename) {
     string filepath = get_data_folder() + filename;
     cout << "dumping to " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "w");
@@ -89,9 +93,9 @@ void DumpBinary(Data *ratings, int num_ratings, string filename) {
     fclose(f);
 }
 
-int LoadBinary(Data *ratings, string filename) {
+int load_binary(Data *ratings, string filename) {
     string filepath = get_data_folder() + filename;
-    cout << "trying to load " << filepath << endl;
+    cout << "trying to load " << filepath << "... ";
     FILE* f = fopen(filepath.c_str(), "r");
     if (!f) {
         cout << "error reading " << filepath << endl;
@@ -105,7 +109,7 @@ int LoadBinary(Data *ratings, string filename) {
 
 void load_avg(float *movie_avg) {
     string filepath = get_data_folder() + "cpp/movie_avg.txt";
-    cout << "trying to load " << filepath << endl;
+    cout << "trying to load " << filepath << "... ";
     FILE* f = fopen(filepath.c_str(), "r");
     if (!f) {
         cout << "error reading " << filepath << endl;
@@ -117,9 +121,11 @@ void load_avg(float *movie_avg) {
 }
 
 void dump_avg(Data *ratings, int num_ratings) {
-    float avg[MAX_MOVIES] = {0}; // movie IDs start at 0, so need an extra one
+    float avg[MAX_MOVIES] = {0}; 
     int count[MAX_MOVIES] = {0};
     Data *rating;
+
+    // compute movie averages
     for (int i=0; i<num_ratings; i++) {
         rating = ratings + i;
         avg[rating->movie] += (float)rating->rating;
@@ -128,6 +134,7 @@ void dump_avg(Data *ratings, int num_ratings) {
     for (int movie=1; movie<MAX_MOVIES; movie++)
         avg[movie] /= 1.0*count[movie];
 
+    // dump them to file
     string filepath = get_data_folder() + "cpp/movie_avg.txt";
     cout << "dumping to " << filepath << endl;
     FILE* f = fopen(filepath.c_str(), "w");
@@ -141,7 +148,7 @@ void dump_avg(Data *ratings, int num_ratings) {
 
 void load_user_dict(map<int, int>& user_dict) {
     string filepath = get_data_folder() + "cpp/user_dict.txt";
-    cout << "trying to load " << filepath << endl;
+    cout << "trying to load " << filepath << "... ";
     FILE* f = fopen(filepath.c_str(), "r");
     if (!f) {
         cout << "error reading " << filepath << endl;

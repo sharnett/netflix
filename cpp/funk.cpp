@@ -1,52 +1,55 @@
 #include <algorithm>
-#include <ctime>
+#include "globals.h"
 #include "load.h"
 #include "predictor.h"
 #include "optimizers.h"
 
 using namespace std;
-using namespace boost;
 
-extern double MIN_IMPROVEMENT;        // Minimum improvement required to continue current feature
-extern int MAX_EPOCHS;           // Max epochs per feature
-extern double LRATE;         // Learning rate parameter
+extern const int MAX_USERS;   // users in the entire training set 
+extern const int MAX_MOVIES;  // movies in the entire training set (+1)
 
-extern const int MAX_USERS;        // users in the entire training set (+1)
-extern const int MAX_MOVIES;         // movies in the entire training set (+1)
-extern const int MAX_RATINGS; 
-
-static int num_features = 5;            // Number of features to use 
+static bool method = 0; // 0 for sgd, 1 for reg gradient descent
 static int sample_size = 1000000;
-static int cv_size = 200000;
-static bool method = 0; // 0 for sgd, 1 for reg gd
+static const int PROBE_SIZE = 1408395;
+static const int NON_PROBE_SIZE = 99072112;
 
+Settings parse_args(int argc, char **argv);
+void setup(int& num_ratings, int& num_cv_ratings, Data *& ratings, Data *& cv_ratings);
 Data *sample(Data *ratings, int sample_size, int num_ratings);
 double cost(Predictor& p, Data *ratings, int num_ratings);
-void parse_args(int argc, char **argv);
 
 int main(int argc, char **argv) {
-    parse_args(argc, argv);
-    Data *ratings, *train_ratings, *cv_ratings;
-    ratings = new Data[MAX_RATINGS];
-    int num_ratings = LoadBinary(ratings); 
-    int train_size = sample_size - cv_size;
-    cout << "using " << sample_size << " ratings: " << train_size << " training, " <<
-        cv_size << " cross validation" << endl;
-    cv_ratings = sample(ratings, sample_size, num_ratings);
-    train_ratings = cv_ratings + cv_size;
-    Predictor p(MAX_USERS, MAX_MOVIES, num_features);
+    Settings s = parse_args(argc, argv);
+    Predictor p(MAX_USERS, MAX_MOVIES, s.num_features);
+    int num_ratings, num_cv_ratings;
+    Data *ratings, *cv_ratings;
+
+    setup(num_ratings, num_cv_ratings, ratings, cv_ratings);
+    cout << "training on " << sample_size << " ratings\n" << endl;
 
     if (method == 0)
-        sgd(p, train_ratings, train_size);
+        sgd(p, ratings, sample_size, s);
     else
-        gd(p, train_ratings, train_size);
-    cout << "training set cost: " << cost(p, train_ratings, train_size) << endl;
-    cout << "cross validation set cost: " << cost(p, cv_ratings, cv_size) << endl;
+        gd(p, ratings, sample_size, s);
 
-    delete [] ratings;
+    cout << "training set cost: " << cost(p, ratings, sample_size) << endl;
+    cout << "cross validation cost: " << cost(p, cv_ratings, num_cv_ratings) << endl;
+
     return 0;
 }
 
+void setup(int& num_ratings, int& num_cv_ratings, Data *& ratings, Data *& cv_ratings) {
+    ratings = new Data[NON_PROBE_SIZE];
+    num_ratings = load_binary(ratings, "cpp/train.bin"); 
+    if (sample_size < NON_PROBE_SIZE)
+        ratings = sample(ratings, sample_size, num_ratings);
+    cv_ratings = new Data[PROBE_SIZE];
+    num_cv_ratings = load_binary(cv_ratings, "cpp/cv.bin"); 
+}
+
+// essentially this takes sample_size random ratings and shoves them to the back
+// of the array, and returns a pointer to the beginning of this shuffled part
 Data *sample(Data *ratings, int sample_size, int num_ratings) {
     int i, r;
     for (i=0; i<sample_size; i++) {
@@ -74,25 +77,33 @@ double cost(Predictor& p, Data *ratings, int num_ratings) {
     return sqrt(sq/num_ratings);
 }
 
-void parse_args(int argc, char **argv) {
+Settings parse_args(int argc, char **argv) {
     if (argc > 2) {
         cout << "usage: ./funk [-i]" << endl;
         exit(1);
     }
-    set_defaults();
+    Settings s;
     if (argc == 2) { // interactive mode
         cout << "enter number of features: ";
-        cin >> num_features;
+        cin >> s.num_features;
         cout << "enter sample size (0 to use all data): ";
         cin >> sample_size;
         if (sample_size <= 0) 
-            sample_size = MAX_RATINGS;
-        cv_size = sample_size/10;
+            sample_size = NON_PROBE_SIZE;
         cout << "enter 0 for sgd, 1 for reg grad desc: ";
         cin >> method;
-        cout << "enter learning rate (0 for .001): ";
-        cin >> LRATE;
-        if (LRATE <= 0)
-            LRATE = .001;
+        if (method == 0)
+            s.lrate = .001;
+        else if (method == 1)
+            s.lrate = .0005;
+        else {
+            cout << "only 0 or 1, silly" << endl;
+            exit(1);
+        }
+        cout << "enter learning rate (0 for ) " << s.lrate << "): ";
+        double temp; cin >> temp;
+        if (temp > 0)
+            s.lrate = temp;
     }
+    return s;
 }

@@ -1,30 +1,20 @@
 #include "optimizers.h"
-#include <cmath>
-#include <iostream>
 
 using namespace std;
 
-double MIN_IMPROVEMENT;        // Minimum improvement required to continue current feature
-int MIN_EPOCHS;           // Minimum number of epochs per feature
-int MAX_EPOCHS;           // Max epochs per feature
-double INIT;           // Initialization value for features
-double LRATE;         // Learning rate parameter
-double K;         // Regularization parameter used to minimize over-fitting
-
-void sgd(Predictor& p, Data *ratings, int num_ratings) {
+void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     cout << "doing stochastic gradient descent" << endl;
     int e, i, user, cnt = 0, num_f=p.get_num_features();
     Data* rating;
     double err, prediction, sq, rmse_last, rmse = 2.0;
     short movie;
-//    float cf, mf;
-    float *cf, *mf, *temp;
+    float *uf, *mf, *temp;
     temp = new float[num_f];
 
     time_t start,end;
-    for (e=0; (e < MIN_EPOCHS) || (rmse <= rmse_last - MIN_IMPROVEMENT); e++) {
+    for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
         time(&start);
-        if (e > MAX_EPOCHS) break;
+        if (e == s.max_epochs) break;
         cnt++;
         sq = 0;
         rmse_last = rmse;
@@ -38,23 +28,16 @@ void sgd(Predictor& p, Data *ratings, int num_ratings) {
             err = (1.0 * rating->rating - prediction);
             sq += err*err;
             
-            // BLAS is ~25% faster than naive method
-            cf = &p.user_features[user*num_f];
+            uf = &p.user_features[user*num_f];
             mf = &p.movie_features[movie*num_f];
-            cblas_scopy(num_f, cf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/K, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -K*LRATE, temp, 1, 
+            cblas_scopy(num_f, uf, 1, temp, 1);
+            cblas_saxpy(num_f, -err/s.K, mf, 1, temp, 1);
+            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
                     &p.user_features[user*num_f], 1);
             cblas_scopy(num_f, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/K, cf, 1, temp, 1);
-            cblas_saxpy(num_f, -K*LRATE, temp, 1, 
+            cblas_saxpy(num_f, -err/s.K, uf, 1, temp, 1);
+            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
                     &p.movie_features[movie*num_f], 1);
-//            for (f=0; f<num_f; f++) {
-//                cf = p.user_features[user][f];
-//                mf = p.movie_features[movie][f];
-//                p.user_features[user][f] += (float)(LRATE * (err * mf - K * cf));
-//                p.movie_features[movie][f] += (float)(LRATE * (err * cf - K * mf));
-//            }
         }
         rmse = sqrt(sq/num_ratings);
         time(&end);
@@ -63,7 +46,7 @@ void sgd(Predictor& p, Data *ratings, int num_ratings) {
     delete [] temp;
 }
 
-void gd(Predictor& p, Data *ratings, int num_ratings) {
+void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     cout << "doing gradient descent" << endl;
     int e, cnt = 0, num_f=p.get_num_features(),
         num_m = p.get_num_movies(), num_u = p.get_num_users(); 
@@ -73,23 +56,18 @@ void gd(Predictor& p, Data *ratings, int num_ratings) {
     float *uf = p.user_features, *mf = p.movie_features;
 
     time_t start,end;
-    for (e=0; (e < MIN_EPOCHS) || (rmse <= rmse_last - MIN_IMPROVEMENT); e++) {
+    for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
         time(&start);
-        if (e > MAX_EPOCHS) break;
+        if (e == s.max_epochs) break;
         cnt++;
         rmse_last = rmse;
 
-        sq = compute_gradient(p, ratings, num_ratings, movie_gradient, user_gradient);
-        // should BLAS this out
-        // and add regularization, jerk off
-//        for (f=0; f<num_f; f++) {
-//            for (movie=0; movie<num_m; movie++) 
-//                p.movie_features[movie][f] -= LRATE * movie_gradient[movie][f];
-//            for (user=0; user<MAX_USERS; user++) 
-//                p.user_features[user][f] -= LRATE * user_gradient[user][f];
-//        }
-        cblas_saxpy(num_m*num_f, -LRATE/(1-LRATE*K), movie_gradient, 1, mf, 1); 
-        cblas_saxpy(num_u*num_f, -LRATE/(1-LRATE*K), user_gradient, 1, uf, 1); 
+        sq = compute_gradient(p, ratings, num_ratings, movie_gradient, 
+                user_gradient, s);
+        cblas_saxpy(num_m*num_f, -s.lrate/(1-s.lrate*s.K), movie_gradient, 1, mf, 1); 
+        cblas_sscal(num_m*num_f, 1-s.lrate*s.K, mf, 1); 
+        cblas_saxpy(num_u*num_f, -s.lrate/(1-s.lrate*s.K), user_gradient, 1, uf, 1); 
+        cblas_sscal(num_u*num_f, 1-s.lrate*s.K, uf, 1); 
         rmse = sqrt(sq/num_ratings);
         time(&end);
         cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
@@ -97,12 +75,12 @@ void gd(Predictor& p, Data *ratings, int num_ratings) {
 }
 
 double compute_gradient(Predictor& p, Data *ratings, int num_ratings, 
-        float *movie_gradient, float *user_gradient) {
-    int user, f, num_f = p.get_num_features(), 
+        float *movie_gradient, float *user_gradient, Settings s) {
+    int user, num_f = p.get_num_features(), 
         num_m = p.get_num_movies(), num_u = p.get_num_users(); 
     short movie;
     double err, prediction, sq=0; 
-    float *cf, *mf, *temp;
+    float *uf, *mf, *temp;
     temp = new float[num_f];
     Data *rating;
     for (int i=0; i<num_m*num_f; i++) movie_gradient[i] = 0;
@@ -110,37 +88,52 @@ double compute_gradient(Predictor& p, Data *ratings, int num_ratings,
 
     for (int i=0; i<num_ratings; i++) {
         rating = ratings + i;
-        movie = rating->movie;
         user = rating->user;
+        movie = rating->movie;
 
         prediction = p.predict(user, movie);
         err = (1.0 * rating->rating - prediction);
         sq += err*err;
-        // BLAS is ~25% faster than naive method
-        cf = &p.user_features[user*num_f];
+
+        uf = &p.user_features[user*num_f];
         mf = &p.movie_features[movie*num_f];
-        cblas_scopy(num_f, cf, 1, temp, 1);
-        cblas_saxpy(num_f, -err/K, mf, 1, temp, 1);
-        cblas_saxpy(num_f, K, temp, 1, &user_gradient[user*num_f], 1);
+        cblas_scopy(num_f, uf, 1, temp, 1);
+        cblas_saxpy(num_f, -err/s.K, mf, 1, temp, 1);
+        cblas_saxpy(num_f, s.K, temp, 1, &user_gradient[user*num_f], 1);
         cblas_scopy(num_f, mf, 1, temp, 1);
-        cblas_saxpy(num_f, -err/K, cf, 1, temp, 1);
-        cblas_saxpy(num_f, K, temp, 1, &movie_gradient[movie*num_f], 1);
+        cblas_saxpy(num_f, -err/s.K, uf, 1, temp, 1);
+        cblas_saxpy(num_f, s.K, temp, 1, &movie_gradient[movie*num_f], 1);
+    }
+    delete [] temp;
+    return sq;
+}
+
+// non-BLAS versions of linear algebra
+// aka non-vectorized loops
+//
+// void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+// ...
+//            for (f=0; f<num_f; f++) {
+//                cf = p.user_features[user][f];
+//                mf = p.movie_features[movie][f];
+//                p.user_features[user][f] += (float)(LRATE * (err * mf - K * cf));
+//                p.movie_features[movie][f] += (float)(LRATE * (err * cf - K * mf));
+//            }
+//
+// void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+// ...
+//        for (f=0; f<num_f; f++) {
+//            for (movie=0; movie<num_m; movie++) 
+//                p.movie_features[movie][f] -= LRATE * movie_gradient[movie][f];
+//            for (user=0; user<MAX_USERS; user++) 
+//                p.user_features[user][f] -= LRATE * user_gradient[user][f];
+//        }
+//
+// double compute_gradient(Predictor& p, Data *ratings, int num_ratings, 
+// ...
 //        for (f=0; f<num_f; f++) {
 //            cf = p.user_features[user][f];
 //            mf = p.movie_features[movie][f];
 //            user_gradient[user][f] += -1*(float) (err * mf - K * cf);
 //            movie_gradient[movie][f] += -1*(float) (err * cf - K * mf);
 //        }
-    }
-    delete [] temp;
-    return sq;
-}
-
-void set_defaults() {
-    MIN_IMPROVEMENT = 0.001;        // Minimum improvement required to continue current feature
-    MIN_EPOCHS = 5;           // Minimum number of epochs per feature
-    MAX_EPOCHS = 20;           // Max epochs per feature
-    INIT = 0.1;           // Initialization value for features
-    LRATE = 0.001;         // Learning rate parameter
-    K = 0.015;         // Regularization parameter used to minimize over-fitting
-}
