@@ -6,8 +6,8 @@ make all
 ./probe_bs
 ./funk -i
 
-PYTHON:
-edit path variable in load_bs.py and stoch_grad_desc.py to point to the right place
-run load_bs.py to load text files and write it out in binary format
-run stoch_grad_desc.py to see how goddamn slow it is
+needs alglib: http://www.alglib.net/download.php
 
+logs crap to a sqlite3 database, this is optional
+
+on Linux, needs BLAS

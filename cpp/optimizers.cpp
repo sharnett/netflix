@@ -8,8 +8,8 @@ void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     Data* rating;
     double err, prediction, sq, rmse_last, rmse = 2.0;
     short movie;
-    float *uf, *mf, *temp;
-    temp = new float[num_f];
+    double *uf, *mf, *temp;
+    temp = new double[num_f];
 
     time_t start,end;
     for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
@@ -19,6 +19,9 @@ void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
         sq = 0;
         rmse_last = rmse;
 
+//        #pragma omp parallel
+//        {
+//        #pragma omp for
         for (i=0; i<num_ratings; i++) {
             rating = ratings + i;
             movie = rating->movie;
@@ -30,15 +33,16 @@ void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
             
             uf = &p.user_features[user*num_f];
             mf = &p.movie_features[movie*num_f];
-            cblas_scopy(num_f, uf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/s.K, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
+            cblas_dcopy(num_f, uf, 1, temp, 1);
+            cblas_daxpy(num_f, -err/s.K, mf, 1, temp, 1);
+            cblas_daxpy(num_f, -s.K*s.lrate, temp, 1, 
                     &p.user_features[user*num_f], 1);
-            cblas_scopy(num_f, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/s.K, uf, 1, temp, 1);
-            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
+            cblas_dcopy(num_f, mf, 1, temp, 1);
+            cblas_daxpy(num_f, -err/s.K, uf, 1, temp, 1);
+            cblas_daxpy(num_f, -s.K*s.lrate, temp, 1, 
                     &p.movie_features[movie*num_f], 1);
         }
+//        }
         rmse = sqrt(sq/num_ratings);
         time(&end);
         cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
@@ -51,9 +55,11 @@ void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     int e, cnt = 0, num_f=p.get_num_features(),
         num_m = p.get_num_movies(), num_u = p.get_num_users(); 
     double sq, rmse_last, rmse = 2.0;
-    float *movie_gradient = new float[num_m*num_f];
-    float *user_gradient = new float[num_u*num_f];
-    float *uf = p.user_features, *mf = p.movie_features;
+//    double *movie_gradient = new float[num_m*num_f];
+//    double *user_gradient = new float[num_u*num_f];
+    double *movie_gradient = new double[(num_m+num_u)*num_f];
+    double *user_gradient = movie_gradient + (num_m*num_f);
+    double *uf = p.user_features, *mf = p.movie_features;
 
     time_t start,end;
     for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
@@ -64,10 +70,10 @@ void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
 
         sq = compute_gradient(p, ratings, num_ratings, movie_gradient, 
                 user_gradient, s);
-        cblas_saxpy(num_m*num_f, -s.lrate/(1-s.lrate*s.K), movie_gradient, 1, mf, 1); 
-        cblas_sscal(num_m*num_f, 1-s.lrate*s.K, mf, 1); 
-        cblas_saxpy(num_u*num_f, -s.lrate/(1-s.lrate*s.K), user_gradient, 1, uf, 1); 
-        cblas_sscal(num_u*num_f, 1-s.lrate*s.K, uf, 1); 
+        cblas_daxpy(num_m*num_f, -s.lrate/(1-s.lrate*s.K), movie_gradient, 1, mf, 1); 
+        cblas_dscal(num_m*num_f, 1-s.lrate*s.K, mf, 1); 
+        cblas_daxpy(num_u*num_f, -s.lrate/(1-s.lrate*s.K), user_gradient, 1, uf, 1); 
+        cblas_dscal(num_u*num_f, 1-s.lrate*s.K, uf, 1); 
         rmse = sqrt(sq/num_ratings);
         time(&end);
         cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
@@ -75,39 +81,136 @@ void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
 }
 
 double compute_gradient(Predictor& p, Data *ratings, int num_ratings, 
-        float *movie_gradient, float *user_gradient, Settings s) {
-    int user, num_f = p.get_num_features(), 
+        double *movie_gradient, double *user_gradient, Settings s) {
+    int num_f = p.get_num_features(), 
         num_m = p.get_num_movies(), num_u = p.get_num_users(); 
-    short movie;
-    double err, prediction, sq=0; 
-    float *uf, *mf, *temp;
-    temp = new float[num_f];
-    Data *rating;
-    for (int i=0; i<num_m*num_f; i++) movie_gradient[i] = 0;
-    for (int i=0; i<num_u*num_f; i++) user_gradient[i] = 0;
+    for (int i=0; i<(num_m+num_u)*num_f; i++) movie_gradient[i] = 0;
+    time_t start,end; time(&start);
+    double sq=0;
+    #pragma omp parallel
+    {
+        int user;
+        short movie;
+        double err, prediction, lcl_sq=0; 
+        double *uf, *mf, *temp;
+        temp = new double[num_f];
+        Data *rating;
+        double *lcl_movie_gradient = new double[(num_m+num_u)*num_f] ();
+        double *lcl_user_gradient = lcl_movie_gradient + (num_m*num_f);
 
-    for (int i=0; i<num_ratings; i++) {
-        rating = ratings + i;
-        user = rating->user;
-        movie = rating->movie;
+    // GRADIENT NEEDS TO BE LOCAL, THEN REDUCED
+    // NUMB NUTS
+    // ALSO, WHY NOT BETTER SPEEDUP?!!!
+        #pragma omp for
+        for (int i=0; i<num_ratings; i++) {
+            rating = ratings + i;
+            user = rating->user;
+            movie = rating->movie;
 
-        prediction = p.predict(user, movie);
-        err = (1.0 * rating->rating - prediction);
-        sq += err*err;
+            prediction = p.predict(user, movie);
+            err = (1.0 * rating->rating - prediction);
+            lcl_sq += err*err;
 
-        uf = &p.user_features[user*num_f];
-        mf = &p.movie_features[movie*num_f];
-        cblas_scopy(num_f, uf, 1, temp, 1);
-        cblas_saxpy(num_f, -err/s.K, mf, 1, temp, 1);
-        cblas_saxpy(num_f, s.K, temp, 1, &user_gradient[user*num_f], 1);
-        cblas_scopy(num_f, mf, 1, temp, 1);
-        cblas_saxpy(num_f, -err/s.K, uf, 1, temp, 1);
-        cblas_saxpy(num_f, s.K, temp, 1, &movie_gradient[movie*num_f], 1);
+            uf = &p.user_features[user*num_f];
+            mf = &p.movie_features[movie*num_f];
+            cblas_dcopy(num_f, uf, 1, temp, 1);
+            cblas_daxpy(num_f, -err/s.K, mf, 1, temp, 1);
+            cblas_daxpy(num_f, s.K, temp, 1, &lcl_user_gradient[user*num_f], 1);
+            cblas_dcopy(num_f, mf, 1, temp, 1);
+            cblas_daxpy(num_f, -err/s.K, uf, 1, temp, 1);
+            cblas_daxpy(num_f, s.K, temp, 1, &lcl_movie_gradient[movie*num_f], 1);
+        }
+        #pragma omp critical
+        {
+            sq += lcl_sq;
+            cblas_daxpy((num_m+num_u)*num_f, (double)10/num_ratings, lcl_movie_gradient, 1, movie_gradient, 1);
+        }
+        //for (int i=0; i<(num_m+num_u)*num_f; i++) movie_gradient[i] += lcl_movie_gradient[i]/num_ratings/10;
+        delete [] temp;
+        delete [] lcl_movie_gradient;
     }
-    delete [] temp;
-    return sq;
+    time(&end); cout << "time: " << difftime(end,start) << "s" << endl;
+    return sqrt(sq/num_ratings);
 }
 
+void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+    int num_f=p.get_num_features(), num_m = p.get_num_movies(), num_u = p.get_num_users(); 
+    double *movie_gradient = new double[(num_m+num_u)*num_f];
+    double *user_gradient = movie_gradient + (num_m*num_f);
+    int n = p.get_num_features() * (p.get_num_movies() + p.get_num_users());
+    real_1d_array x; x.setlength(n);
+    x.setcontent(n, p.movie_features);
+    double epsg = 0;
+    double epsf = 0.00001;
+    double epsx = 0.01;
+    ae_int_t maxits = s.max_epochs;
+//    minlbfgsstate state;
+//    minlbfgsreport rep;
+    mincgstate state;
+    mincgreport rep;
+    BFGS_ptr b(p, ratings, num_ratings, movie_gradient, user_gradient, s);
+
+    mincgcreate(n, x, state);
+    mincgsetcond(state, epsg, epsf, epsx, maxits);
+    mincgsetxrep(state, true);
+    cout << "optimizing" << endl;
+    alglib::mincgoptimize(state, bfgs_grad, bfgs_callback, &b);
+    cout << "getting results" << endl;
+    mincgresults(state, x, rep);
+
+    /*
+    minlbfgscreate(n, 3, x, state);
+    minlbfgssetcond(state, epsg, epsf, epsx, maxits);
+    minlbfgssetxrep(state, true);
+    cout << "optimizing" << endl;
+    alglib::minlbfgsoptimize(state, bfgs_grad, bfgs_callback, &b);
+    cout << "getting results" << endl;
+    minlbfgsresults(state, x, rep);
+*/
+    cout << rep.iterationscount << " iterations " << rep.nfev << " function evaluations" << endl;
+    switch(rep.terminationtype) {
+        case -2:
+            cout << "rounding errors prevent further improvement. X contains best point found." << endl;
+            break;
+        case -1:
+            cout << "incorrect parameters were specified" << endl;
+            break;
+        case 1:
+            cout << "success. relative function improvement is no more than " << epsf << endl;
+            break;
+        case 2:
+            cout << "success. relative step is no more than " << epsx << endl;
+            break;
+        case 4:
+            cout << "success. gradient norm is no more than " << epsg << endl;
+            break;
+        case 5:
+            cout << "MaxIts steps was taken" << endl;
+            break;
+        case 7:
+            cout << "stopping conditions are too stringent, further improvement is impossible" << endl;
+            break;
+    }
+}
+
+void bfgs_grad(const real_1d_array &x, double &f, real_1d_array &grad, void *p) {
+    // add time info
+    BFGS_ptr *b = (BFGS_ptr *)p;
+    int n = x.length();
+    for (int i=0; i<n; i++)
+        b->predictor.movie_features[i] = x[i];
+    f = compute_gradient(b->predictor, b->ratings, b->num_ratings, 
+            b->movie_gradient, b->user_gradient, b->settings);
+    for (int i=0; i<n; i++)
+        grad[i] = b->movie_gradient[i];
+    //grad.setcontent(n, b->movie_gradient);
+}
+
+void bfgs_callback(const real_1d_array &x, double f, void *p) {
+    static int i = 0;
+    i++;
+    cout << "step " << i << " rmse: " << f << endl;
+}
 // non-BLAS versions of linear algebra
 // aka non-vectorized loops
 //
@@ -116,8 +219,8 @@ double compute_gradient(Predictor& p, Data *ratings, int num_ratings,
 //            for (f=0; f<num_f; f++) {
 //                cf = p.user_features[user][f];
 //                mf = p.movie_features[movie][f];
-//                p.user_features[user][f] += (float)(LRATE * (err * mf - K * cf));
-//                p.movie_features[movie][f] += (float)(LRATE * (err * cf - K * mf));
+//                p.user_features[user][f] += (double)(LRATE * (err * mf - K * cf));
+//                p.movie_features[movie][f] += (double)(LRATE * (err * cf - K * mf));
 //            }
 //
 // void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
@@ -134,6 +237,6 @@ double compute_gradient(Predictor& p, Data *ratings, int num_ratings,
 //        for (f=0; f<num_f; f++) {
 //            cf = p.user_features[user][f];
 //            mf = p.movie_features[movie][f];
-//            user_gradient[user][f] += -1*(float) (err * mf - K * cf);
-//            movie_gradient[movie][f] += -1*(float) (err * cf - K * mf);
+//            user_gradient[user][f] += -1*(double) (err * mf - K * cf);
+//            movie_gradient[movie][f] += -1*(double) (err * cf - K * mf);
 //        }

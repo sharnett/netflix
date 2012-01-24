@@ -8,6 +8,9 @@
 #include <fstream>
 #include <map>
 #include "globals.h"
+#include "predictor.h"
+
+class Predictor;
 
 using namespace std;
 
@@ -19,6 +22,8 @@ int load_binary(Data *ratings, string filename = "cpp/binary.txt");
 void dump_avg(Data *ratings, int num_ratings);
 void load_avg(float *movie_avg);
 void load_user_dict(map<int, int>& user_dict);
+void load_features(Predictor& p);
+void dump_features(Predictor& p);
 string get_data_folder();
 
 #endif
