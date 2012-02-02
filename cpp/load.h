@@ -24,6 +24,8 @@ void load_avg(float *movie_avg);
 void load_user_dict(map<int, int>& user_dict);
 void load_features(Predictor& p);
 void dump_features(Predictor& p);
+void load_averages(double *movie_avg);
+void dump_averages(double *movie_avg);
 string get_data_folder();
 
 #endif

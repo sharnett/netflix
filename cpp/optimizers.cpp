@@ -138,35 +138,26 @@ void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     double *movie_gradient = new double[(num_m+num_u)*num_f];
     double *user_gradient = movie_gradient + (num_m*num_f);
     int n = p.get_num_features() * (p.get_num_movies() + p.get_num_users());
-    real_1d_array x; x.setlength(n);
-    x.setcontent(n, p.movie_features);
+    real_1d_array x; x.setcontent(n, p.movie_features);
     double epsg = 0;
-    double epsf = 0.00001;
-    double epsx = 0.01;
+    double epsf = 0;
+    double epsx = .8;
+    real_1d_array scale; scale.setlength(n); for (int i=0; i<n; i++) scale[i] = 1.0;
     ae_int_t maxits = s.max_epochs;
-//    minlbfgsstate state;
-//    minlbfgsreport rep;
+    cout << "maxits: " << maxits << endl;
+    cout << "lambda: " << s.K << endl;
     mincgstate state;
     mincgreport rep;
     BFGS_ptr b(p, ratings, num_ratings, movie_gradient, user_gradient, s);
 
     mincgcreate(n, x, state);
+    mincgsetscale(state, scale);
     mincgsetcond(state, epsg, epsf, epsx, maxits);
     mincgsetxrep(state, true);
     cout << "optimizing" << endl;
     alglib::mincgoptimize(state, bfgs_grad, bfgs_callback, &b);
-    cout << "getting results" << endl;
     mincgresults(state, x, rep);
 
-    /*
-    minlbfgscreate(n, 3, x, state);
-    minlbfgssetcond(state, epsg, epsf, epsx, maxits);
-    minlbfgssetxrep(state, true);
-    cout << "optimizing" << endl;
-    alglib::minlbfgsoptimize(state, bfgs_grad, bfgs_callback, &b);
-    cout << "getting results" << endl;
-    minlbfgsresults(state, x, rep);
-*/
     cout << rep.iterationscount << " iterations " << rep.nfev << " function evaluations" << endl;
     switch(rep.terminationtype) {
         case -2:
@@ -194,7 +185,6 @@ void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s) {
 }
 
 void bfgs_grad(const real_1d_array &x, double &f, real_1d_array &grad, void *p) {
-    // add time info
     BFGS_ptr *b = (BFGS_ptr *)p;
     int n = x.length();
     for (int i=0; i<n; i++)
@@ -203,7 +193,6 @@ void bfgs_grad(const real_1d_array &x, double &f, real_1d_array &grad, void *p) 
             b->movie_gradient, b->user_gradient, b->settings);
     for (int i=0; i<n; i++)
         grad[i] = b->movie_gradient[i];
-    //grad.setcontent(n, b->movie_gradient);
 }
 
 void bfgs_callback(const real_1d_array &x, double f, void *p) {

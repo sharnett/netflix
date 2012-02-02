@@ -3,6 +3,7 @@
 using namespace std;
 
 extern const int MAX_MOVIES;         // Movies in the entire training set (+1)
+extern const int MAX_USERS;
 
 int load_history(Data *ratings, bool dump_dict) {
     time_t start,end; time(&start);
@@ -187,6 +188,36 @@ void dump_features(Predictor& p) {
     FILE* f = fopen(filename.c_str(), "w");
     int m = p.get_num_features() * (p.get_num_movies() + p.get_num_users());
     int n = fwrite(p.movie_features, sizeof(double), m, f);
+    if (n != m) {
+        cout << "error dumping" << endl;
+        exit(1);
+    }
+    fclose(f);
+}
+
+void load_averages(double *movie_avg) {
+    string filename = get_data_folder() + "cpp/avgs.bin";
+    cout << "trying to load " << filename << "... ";
+    FILE* f = fopen(filename.c_str(), "r");
+    if (!f) {
+        cout << "error reading " << filename << endl;
+        exit(1);
+    }
+    int m = MAX_USERS + MAX_MOVIES;
+    int n = fread(movie_avg, sizeof(double), m, f);
+    if (n != m) {
+        cout << "error reading " << filename << endl;
+        exit(1);
+    }
+    fclose(f);
+}
+
+void dump_averages(double *movie_avg) {
+    string filename = get_data_folder() + "cpp/avgs.bin";
+    cout << "dumping " << filename << endl;
+    FILE* f = fopen(filename.c_str(), "w");
+    int m = MAX_USERS + MAX_MOVIES;
+    int n = fwrite(movie_avg, sizeof(double), m, f);
     if (n != m) {
         cout << "error dumping" << endl;
         exit(1);

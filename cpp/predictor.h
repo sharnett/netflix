@@ -33,7 +33,9 @@ private:
     int num_movies;
     int num_features;
 
-    float *movie_avg;
+    double *movie_avg;
+    double *user_avg;
+    double average;
 };
 
 // worthless random number generator helper

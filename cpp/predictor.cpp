@@ -8,8 +8,10 @@ Predictor::Predictor(int nu, int nm, int nf) {
     user_features = movie_features + (nm*nf);
     for (int i=0; i<(nm+nu)*nf; i++) 
         movie_features[i] = rndn();
-    movie_avg = new float[num_movies];
-    load_avg(movie_avg);
+    movie_avg = new double[nu+nm];
+    load_averages(movie_avg);
+    user_avg = movie_avg + nm;
+    average = 3.6033;
 }
 
 Predictor::~Predictor() {
@@ -19,7 +21,7 @@ Predictor::~Predictor() {
 }
 
 double Predictor::predict(int user, short movie) {
-    double sum = movie_avg[movie];
+    double sum = average + movie_avg[movie] + user_avg[user];
     sum += cblas_ddot(num_features, &movie_features[movie*num_features],
             1, &user_features[user*num_features], 1);
 //    for (int f=0; f<num_features; f++) 
@@ -30,7 +32,7 @@ double Predictor::predict(int user, short movie) {
 }
 
 double rndn() {
-    return (double)rand()/RAND_MAX/5 - .1;
+    return 3*((double)rand()/RAND_MAX/5 - .1);
     // the below uses the boost library to get normal random numbers
     // not really necessary
 /*    using namespace boost;

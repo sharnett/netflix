@@ -104,7 +104,7 @@ Settings parse_args(int argc, char **argv) {
         exit(1);
     }
     if (argc == 3) {
-        s.num_features = 32;
+        s.num_features = 50;
         sample_size = NON_PROBE_SIZE;
         method = 2;
         s.max_epochs = 0;
@@ -134,12 +134,10 @@ Settings parse_args(int argc, char **argv) {
             if (temp > 0)
                 s.lrate = temp;
         }
-        cout << "enter 1 to load features.bin; 0 for random start ";
-        cin >> warm_start;
-        cout << "dump answer? (1 yes, 0 no) ";
-        cin >> s.dump;
         cout << "max iterations: ";
         cin >> s.max_epochs;
+        cout << "learning rate: ";
+        cin >> s.K;
     }
     return s;
 }
