@@ -1,0 +1,40 @@
+<html>
+    <head>
+        <title> Messing around with the Netflix Prize data set </title>
+        <style type="text/css">
+            body {
+                max-width: 650px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h1> Messing around with the Netflix Prize data set </h1>
+        <hr/>
+
+        <h3> What is this </h3>
+        <p> I wanted to play with different algorithms on the Netflix Prize data. Quick summary of the challenge: you have a bunch of 1-5 ratings from users on movies, and from that information, want to predict what some of those users would rate some of those movies for which you don't have ratings. </p>
+
+        <h3> Algos </h3>
+        <p> There is a ton of stuff on how to do this. My interest came from reading articles on how to parallelize stochastic gradient descent, an algorithm which doesn't really parallelize easily (HOGWILD and JELLYFISH). The simplest way to do this is standard gradient descent (or better yet, l-BFGS or non-linear conjugate gradient), which easily fits into the map-reduce idea for parallelization.</p>
+
+        <h3> Python </h3>
+        <p> My first attempts in Python were terribly slow so I switched to C++. I intend to revisit Python, and learn how to tie it in with C (C++?) code for the bottlenecks. Python is way faster to develop in, but the runtime was unbearably slow.</p>
+
+        <h3> Links </h3>
+        <ul>
+            <li> <a href="http://arxiv.org/pdf/1106.5730v2">Hogwild paper</a> <br/>
+            <li> <a href= "http://pages.cs.wisc.edu/~brecht/papers/11.Rec.Re.IPGM.pdf">Jellyfish paper</a> <br/>
+            <li> Hogwild, Jellyfish <a href="http://research.cs.wisc.edu/hazy/victor/">code</a>
+            <li> Fully implemented windows <a href="http://www.timelydevelopment.com/demos/NetflixPrize.aspx">C++ code</a> for netflix prize stochastic gradient descent using the Simon Funk method linked previously <br/>
+            <li> some dude's <a href="http://www.netflixprize.com/community/viewtopic.php?id=1498">off the cuff explanation of jellyfish</a> (several years prior to the paper)
+            <li> The <a href="http://public.research.att.com/~volinsky/netflix/">winners' explanations</a> for more accurate predictions than plain SVD, in particular SVD++. Look at "Factorization Meets the Neighborhood: a Multifaceted Collaborative Filtering Model"
+            <li> Some nice <a href="http://www.alglib.net/">solver code</a>, especially L-BFGS and conjugate gradient
+            <li> Excellent <a href="http://www.stanford.edu/~acoates/papers/LeNgiCoaLahProNg11.pdf">discussion of SGD vs L-BFGS vs CG</a> in parallel setting:
+        </ul>
+
+        <h3> Data </h3>
+        <p> The data isn't freely available anymore, but it's not too hard to find. Contact me and I can hook you up. </p>
+
+    </body>
+</html>
