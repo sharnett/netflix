@@ -1,5 +1,5 @@
 CXX = g++
-VPATH = ./cpp/src
+VPATH = ./alglib
 CXXFLAGS = -O3 -lsqlite3 -fopenmp -Wall -I$(VPATH) 
 
 PROG = funk
