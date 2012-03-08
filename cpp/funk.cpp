@@ -1,15 +1,18 @@
 #include <algorithm>
+#include <sqlite3.h>
 #include "globals.h"
 #include "load.h"
 #include "predictor.h"
 #include "optimizers.h"
+#include <omp.h>
 
 using namespace std;
 
 extern const int MAX_USERS;   // users in the entire training set 
 extern const int MAX_MOVIES;  // movies in the entire training set (+1)
 
-static bool method = 0; // 0 for sgd, 1 for reg gradient descent
+static int method = 0; // 0 for sgd, 1 for reg gradient descent, 2 for conjugate gradient
+static bool warm_start = 0; // set to 1 to load features.bin, previous solution
 static int sample_size = 1000000;
 static const int PROBE_SIZE = 1408395;
 static const int NON_PROBE_SIZE = 99072112;
@@ -18,23 +21,41 @@ Settings parse_args(int argc, char **argv);
 void setup(int& num_ratings, int& num_cv_ratings, Data *& ratings, Data *& cv_ratings);
 Data *sample(Data *ratings, int sample_size, int num_ratings);
 double cost(Predictor& p, Data *ratings, int num_ratings);
+void log(Settings& s, double total_time, double train_cost, double cv_cost);
 
 int main(int argc, char **argv) {
     Settings s = parse_args(argc, argv);
     Predictor p(MAX_USERS, MAX_MOVIES, s.num_features);
+    if (warm_start)
+        load_features(p);
     int num_ratings, num_cv_ratings;
     Data *ratings, *cv_ratings;
 
     setup(num_ratings, num_cv_ratings, ratings, cv_ratings);
     cout << "training on " << sample_size << " ratings\n" << endl;
 
+    time_t start,end; time(&start);
     if (method == 0)
         sgd(p, ratings, sample_size, s);
-    else
+    else if (method == 1)
         gd(p, ratings, sample_size, s);
+    else if (method == 2)
+        bfgs(p, ratings, sample_size, s);
+    time(&end); 
+    
+    double total_time, train_cost, cv_cost;
+    total_time = difftime(end,start);
+    train_cost = cost(p, ratings, sample_size);
+    cv_cost = cost(p, cv_ratings, num_cv_ratings);
 
-    cout << "training set cost: " << cost(p, ratings, sample_size) << endl;
-    cout << "cross validation cost: " << cost(p, cv_ratings, num_cv_ratings) << endl;
+    cout << "total time: " << total_time << "s" << endl;
+    cout << "training set cost: " << train_cost << endl;
+    cout << "cross validation cost: " << cv_cost << endl;
+
+    if (s.dump)
+        dump_features(p);
+
+    log(s, total_time, train_cost, cv_cost);
 
     return 0;
 }
@@ -62,27 +83,39 @@ Data *sample(Data *ratings, int sample_size, int num_ratings) {
 }
 
 double cost(Predictor& p, Data *ratings, int num_ratings) {
-    double err, prediction, sq = 0;
-    int user; short movie;
-    Data *rating;
-    for (int i=0; i<num_ratings; i++) {
-        rating = ratings + i;
-        movie = rating->movie;
-        user = rating->user;
-
-        prediction = p.predict(user, movie);
-        err = (1.0 * rating->rating - prediction);
-        sq += err*err;
+    double sq = 0;
+    #pragma omp parallel reduction(+: sq)
+    {
+        double err, lcl_sq = 0;
+        int user, movie;
+        Data *rating;
+        #pragma omp for
+        for (int i=0; i<num_ratings; i++) {
+            rating = ratings + i;
+            movie = rating->movie;
+            user = rating->user;
+            err = p.predict(user, movie) - (double)rating->rating;
+            lcl_sq += err*err;
+        }
+        sq += lcl_sq;
     }
     return sqrt(sq/num_ratings);
 }
 
 Settings parse_args(int argc, char **argv) {
-    if (argc > 2) {
-        cout << "usage: ./funk [-i]" << endl;
+    Settings s;
+    if (argc > 3) {
+        cout << "usage: ./funk [-i] [x K]" << endl;
         exit(1);
     }
-    Settings s;
+    if (argc == 3) {
+        s.num_features = 50;
+        sample_size = NON_PROBE_SIZE;
+        method = 2;
+        s.max_epochs = 0;
+        s.K = atof(argv[2]);
+        cout << "using K = " << s.K << endl;
+    }
     if (argc == 2) { // interactive mode
         cout << "enter number of features: ";
         cin >> s.num_features;
@@ -90,20 +123,64 @@ Settings parse_args(int argc, char **argv) {
         cin >> sample_size;
         if (sample_size <= 0) 
             sample_size = NON_PROBE_SIZE;
-        cout << "enter 0 for sgd, 1 for reg grad desc: ";
+        cout << "enter 0 for sgd, 1 for reg grad desc, 2 for bfgs: ";
         cin >> method;
         if (method == 0)
             s.lrate = .001;
         else if (method == 1)
             s.lrate = .0005;
-        else {
-            cout << "only 0 or 1, silly" << endl;
+        else if (method != 2) {
+            cout << "only 0 or 1 or 2, silly" << endl;
             exit(1);
         }
-        cout << "enter learning rate (0 for " << s.lrate << "): ";
-        double temp; cin >> temp;
-        if (temp > 0)
-            s.lrate = temp;
+        if (method == 0 || method == 1) {
+            cout << "enter learning rate (0 for " << s.lrate << "): ";
+            double temp; cin >> temp;
+            if (temp > 0)
+                s.lrate = temp;
+        }
+        cout << "max iterations: ";
+        cin >> s.max_epochs;
+        cout << "learning rate: ";
+        cin >> s.K;
     }
     return s;
+}
+
+void log(Settings& s, double total_time, double train_cost, double cv_cost) {
+    sqlite3 *db;
+    char *zErrMsg = 0;
+    int rc;
+    string sql;
+    rc = sqlite3_open_v2("log.db", &db, SQLITE_OPEN_READWRITE, NULL);
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(1);
+    }
+
+    sql = "INSERT INTO log "
+          "(datetime, method, num_features, cv_cost, time, train_cost, learning_rate, "
+          "regularizer, sample_size, warm_start) "
+          "VALUES (datetime('now'), ";
+    char temp[100];
+    string method_string;
+    if (method == 0) method_string = "sgd";
+    else if (method == 1) method_string = "gd";
+    else if (method == 2) {
+        method_string = "cg";
+        s.lrate = 0;
+    }
+    sprintf(temp, "'%s', %d, %f, %f, %f, %f, %f, %d, %d)",
+            method_string.c_str(), s.num_features, cv_cost, total_time, train_cost, s.lrate,
+            s.K, sample_size, warm_start);
+    sql += temp;
+
+    rc = sqlite3_exec(db, sql.c_str(), NULL, 0, &zErrMsg);
+    if (rc!=SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+    }
+    sqlite3_close(db);
+
 }
