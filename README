@@ -1,4 +1,3 @@
-check out the advanced branch for way sweeter stuff!!!
 more info: http://sharnett.github.com/netflix/
 
 TO RUN C++ VERSION:
@@ -9,7 +8,7 @@ make all
 ./probe_bs
 ./funk -i
 
-needs alglib: http://www.alglib.net/download.php
+uses alglib (source already included) http://www.alglib.net/
 
 logs crap to a sqlite3 database, this is optional
 
