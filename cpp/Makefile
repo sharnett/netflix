@@ -1,6 +1,6 @@
 CXX = g++
 VPATH = ./cpp/src
-CXXFLAGS = -g -lsqlite3 -fopenmp -Wall -I$(VPATH) 
+CXXFLAGS = -O3 -lsqlite3 -fopenmp -Wall -I$(VPATH) 
 
 PROG = funk
 OBJS = funk.o load.o optimizers.o predictor.o globals.h

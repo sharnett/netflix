@@ -180,6 +180,7 @@ void load_features(Predictor& p) {
         exit(1);
     }
     fclose(f);
+    cout << n << " feature values loaded" << endl;
 }
 
 void dump_features(Predictor& p) {
@@ -210,6 +211,7 @@ void load_averages(double *movie_avg) {
         exit(1);
     }
     fclose(f);
+    cout << n << " average values loaded" << endl;
 }
 
 void dump_averages(double *movie_avg) {

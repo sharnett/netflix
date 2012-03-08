@@ -4,6 +4,7 @@
 #include "load.h"
 #include "predictor.h"
 #include "optimizers.h"
+#include <omp.h>
 
 using namespace std;
 
@@ -82,17 +83,21 @@ Data *sample(Data *ratings, int sample_size, int num_ratings) {
 }
 
 double cost(Predictor& p, Data *ratings, int num_ratings) {
-    double err, prediction, sq = 0;
-    int user; short movie;
-    Data *rating;
-    for (int i=0; i<num_ratings; i++) {
-        rating = ratings + i;
-        movie = rating->movie;
-        user = rating->user;
-
-        prediction = p.predict(user, movie);
-        err = (1.0 * rating->rating - prediction);
-        sq += err*err;
+    double sq = 0;
+    #pragma omp parallel reduction(+: sq)
+    {
+        double err, lcl_sq = 0;
+        int user, movie;
+        Data *rating;
+        #pragma omp for
+        for (int i=0; i<num_ratings; i++) {
+            rating = ratings + i;
+            movie = rating->movie;
+            user = rating->user;
+            err = p.predict(user, movie) - (double)rating->rating;
+            lcl_sq += err*err;
+        }
+        sq += lcl_sq;
     }
     return sqrt(sq/num_ratings);
 }

@@ -4,7 +4,7 @@ Predictor::Predictor(int nu, int nm, int nf) {
     srand(0);
     //srand(time(0));
     num_users = nu; num_movies = nm; num_features = nf;
-    movie_features = new double[(nm+nu)*nf];
+    movie_features = new float[(nm+nu)*nf];
     user_features = movie_features + (nm*nf);
     for (int i=0; i<(nm+nu)*nf; i++) 
         movie_features[i] = rndn();
@@ -20,9 +20,9 @@ Predictor::~Predictor() {
     delete [] movie_avg;
 }
 
-double Predictor::predict(int user, short movie) {
-    double sum = average + movie_avg[movie] + user_avg[user];
-    sum += cblas_ddot(num_features, &movie_features[movie*num_features],
+float Predictor::predict(int user, short movie) {
+    float sum = average + movie_avg[movie] + user_avg[user];
+    sum += cblas_sdot(num_features, &movie_features[movie*num_features],
             1, &user_features[user*num_features], 1);
 //    for (int f=0; f<num_features; f++) 
 //        sum += movie_features[movie][f] * user_features[user][f];
