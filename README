@@ -13,3 +13,54 @@ uses alglib (source already included) http://www.alglib.net/
 logs crap to a sqlite3 database, this is optional
 
 on Linux, needs BLAS
+
+--------------------------------------------------------------------------------
+a ton of files, what are they?
+
+* alglib
+    Code for L-BFGS and non-linear conjugate gradient
+
+* best_avgs
+* train_and_dump_avgs
+    Solves least squares problem to find an offset for each movie and user. The
+    base prediction for movie i and user j is then 
+        \p_ij = \mu + \mu_i + \mu_j
+    Where \mu is the overall average rating, \mu_i is the offset for movie i,
+    and \mu_j is the offset for user j. It cross-validates against the probe
+    set to find the best choices that prevent over-fitting. This is explained
+    a bit more in the "Winners' paper" link.
+
+    best_avgs finds the optimal regularization parameter. The other code solves
+    with this parameter and write the result to disk.
+
+* best_lambda
+    Finds best regularization parameter for a given number of features.
+
+* create_binaries
+    Reads in the Netflix Prize data from the text files and converts it to more
+    convenient binary format for fast loading.
+
+* find_average
+    Finds overall average rating, sum(ratings)/len(ratings)
+
+* fmin
+    Some freely available code for minimizing a 1D function over an interval 
+    without using derivatives. It's the same algorithm as MATLAB's fminbnd. This
+    gets used when tuning meta-parameters during cross-validation.
+
+* funk
+    Main program
+
+* load
+    Helper functions to read various data from disk.
+
+* optimizers
+    Code for L-BFGS, CG, SGD, GD
+
+* predictor
+    Class that predicts ratings. Maintains a user and movie matrix, the product
+    of which is the predictions matrix.
+
+* probe_bs
+    Removes ratings in the probe set from the data to get a pure training set.
+    The probe set is then used for cross-validation.

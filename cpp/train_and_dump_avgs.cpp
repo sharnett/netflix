@@ -37,7 +37,6 @@ struct cg_ptr {
     double *user_gradient; 
 };
 
-// args: min_lambda max_lambda
 int main(int argc, char **argv) {
     time_t start, end; 
     double total_time, train_cost, cv_cost;
