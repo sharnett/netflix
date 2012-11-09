@@ -7,9 +7,9 @@ OBJS = funk.o load.o optimizers.o predictor.o globals.h
 PROG2 = best_lambda
 OBJS2 = best_lambda.o load.o optimizers.o predictor.o fmin.o globals.h
 UNAME := $(shell uname)
-#BONUS = -lblas
+BONUS = -lblas
 #BONUS = /home/sean/lib/atlas/lib/libcblas.a /home/sean/lib/atlas/lib/libatlas.a
-BONUS = -L/home/sean/bin/intel/composer_xe_2011_sp1.7.256/composer_xe_2011_sp1.7.256/mkl/lib/intel64 -lmkl_rt
+#BONUS = -L/home/sean/bin/intel/composer_xe_2011_sp1.7.256/composer_xe_2011_sp1.7.256/mkl/lib/intel64 -lmkl_rt
 ifeq ($(UNAME), Darwin)
 	BONUS = -framework Accelerate 
 endif
@@ -27,13 +27,14 @@ best_averages: best_averages.o $(CRAPOBJ) load.o fmin.o globals.h
 	$(CXX) $(CXXFLAGS) $(BONUS) $^ -o best_averages
 train_and_dump_avgs: train_and_dump_avgs.o $(CRAPOBJ) load.o globals.h
 	$(CXX) $(CXXFLAGS) $(BONUS) $^ -o train_and_dump_avgs
+test: load.o globals.h
 
 optimizers.o: optimizers.h globals.h
 predictor.o: predictor.h globals.h
 load.o: load.h predictor.h globals.h
 fmin.o: fmin.h
 
-PROGS = funk create_binaries probe_bs best_lambda find_average best_averages train_and_dump_avgs
+PROGS = funk create_binaries probe_bs best_lambda find_average best_averages train_and_dump_avgs test
 
 .PHONY: clean
 clean:

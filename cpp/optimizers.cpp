@@ -4,83 +4,84 @@ using namespace std;
 
 static time_t start, end;
 
-void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+void sgd(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, Settings s) {
     cout << "doing stochastic gradient descent" << endl;
     int e, i, user, cnt = 0, num_f=p.get_num_features();
     Data* rating;
-    float err, prediction, sq, rmse_last=3, rmse = 2.0;
+    double err, sq, rmse_last=3, rmse = 2.0, alpha = s.lrate, decay=.98;
     short movie;
     float *uf, *mf, *temp;
     temp = new float[num_f];
 
-    //time_t start,end;
+    time(&start);
     for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
-        time(&start);
         if (e == s.max_epochs) break;
         cnt++;
         sq = 0;
         rmse_last = rmse;
 
-//        #pragma omp parallel
-//        {
-//        #pragma omp for
         for (i=0; i<num_ratings; i++) {
             rating = ratings + i;
             movie = rating->movie;
             user = rating->user;
 
-            prediction = p.predict(user, movie);
-            err = (1.0 * rating->rating - prediction);
+            err = p.predict(user, movie) - (double)rating->rating;
             sq += err*err;
             
             uf = &p.user_features[user*num_f];
             mf = &p.movie_features[movie*num_f];
             cblas_scopy(num_f, uf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/s.K, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
+            cblas_saxpy(num_f, err/s.K, mf, 1, temp, 1);
+            cblas_saxpy(num_f, -s.K*alpha, temp, 1, 
                     &p.user_features[user*num_f], 1);
             cblas_scopy(num_f, mf, 1, temp, 1);
-            cblas_saxpy(num_f, -err/s.K, uf, 1, temp, 1);
-            cblas_saxpy(num_f, -s.K*s.lrate, temp, 1, 
+            cblas_saxpy(num_f, err/s.K, uf, 1, temp, 1);
+            cblas_saxpy(num_f, -s.K*alpha, temp, 1, 
                     &p.movie_features[movie*num_f], 1);
         }
-//        }
         rmse = sqrt(sq/num_ratings);
+        //rmse = cost(p, cv_ratings, num_cv_ratings);
+        alpha *= decay;
         time(&end);
         cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
     }
+    if (e >= s.max_epochs) 
+        cout << "stochastic gradient descent finished with max iterations: " << e << endl;
+    else if (rmse > rmse_last - s.min_improvement) 
+        cout << "stochastic gradient descent finished. Improvement " <<
+            rmse_last-rmse << " is less than minimum " << s.min_improvement << endl;
     delete [] temp;
 }
 
-void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
-    cout << "doing gradient descent" << endl;
-    int e, cnt = 0, num_f=p.get_num_features(),
-        num_m = p.get_num_movies(), num_u = p.get_num_users(); 
-    float sq, rmse_last=3, rmse = 2.0;
-    float *movie_gradient = new float[(num_m+num_u)*num_f];
-    float *user_gradient = movie_gradient + (num_m*num_f);
-    float *uf = p.user_features, *mf = p.movie_features;
+//void gd(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+//    cout << "doing gradient descent" << endl;
+//    int e, cnt = 0, num_f=p.get_num_features(),
+//        num_m = p.get_num_movies(), num_u = p.get_num_users(); 
+//    float sq, rmse_last=3, rmse = 2.0;
+//    float *movie_gradient = new float[(num_m+num_u)*num_f];
+//    float *user_gradient = movie_gradient + (num_m*num_f);
+//    float *uf = p.user_features, *mf = p.movie_features;
+//
+//    //time_t start,end;
+//    for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
+//        time(&start);
+//        if (e == s.max_epochs) break;
+//        cnt++;
+//        rmse_last = rmse;
+//
+//        sq = compute_gradient(p, ratings, num_ratings, movie_gradient, 
+//                user_gradient, s.K);
+//        cblas_saxpy(num_m*num_f, -s.lrate/(1-s.lrate*s.K), movie_gradient, 1, mf, 1); 
+//        cblas_sscal(num_m*num_f, 1-s.lrate*s.K, mf, 1); 
+//        cblas_saxpy(num_u*num_f, -s.lrate/(1-s.lrate*s.K), user_gradient, 1, uf, 1); 
+//        cblas_sscal(num_u*num_f, 1-s.lrate*s.K, uf, 1); 
+//        rmse = sqrt(sq/num_ratings);
+//        time(&end);
+//        cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
+//    }
+//}
 
-    //time_t start,end;
-    for (e=0; (e < s.min_epochs) || (rmse <= rmse_last - s.min_improvement); e++) {
-        time(&start);
-        if (e == s.max_epochs) break;
-        cnt++;
-        rmse_last = rmse;
-
-        sq = compute_gradient(p, ratings, num_ratings, movie_gradient, 
-                user_gradient, s.K);
-        cblas_saxpy(num_m*num_f, -s.lrate/(1-s.lrate*s.K), movie_gradient, 1, mf, 1); 
-        cblas_sscal(num_m*num_f, 1-s.lrate*s.K, mf, 1); 
-        cblas_saxpy(num_u*num_f, -s.lrate/(1-s.lrate*s.K), user_gradient, 1, uf, 1); 
-        cblas_sscal(num_u*num_f, 1-s.lrate*s.K, uf, 1); 
-        rmse = sqrt(sq/num_ratings);
-        time(&end);
-        cout << cnt << " " << rmse << " time: " << difftime(end,start) << "s" << endl;
-    }
-}
-
-float compute_gradient(Predictor& p, Data *ratings, int num_ratings, 
+float compute_gradient(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, 
         float *movie_gradient, float *user_gradient, float K) {
     int nf = p.get_num_features(), nm = p.get_num_movies(), nu = p.get_num_users(); 
     float sq=0;
@@ -122,9 +123,10 @@ float compute_gradient(Predictor& p, Data *ratings, int num_ratings,
     }
     cout << "." << flush;
     return sqrt(sq/num_ratings);
+    //return cost(p, cv_ratings, num_cv_ratings);
 }
 
-void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s) {
+void bfgs(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, Settings s) { 
     int num_f=p.get_num_features(), num_m = p.get_num_movies(), num_u = p.get_num_users(); 
     float *movie_gradient = new float[(num_m+num_u)*num_f];
     float *user_gradient = movie_gradient + (num_m*num_f);
@@ -132,16 +134,14 @@ void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s) {
     real_1d_array x; x.setlength(n);
     for (int i=0; i<n; i++) x[i] = p.movie_features[i];
     float epsg = 0;
-    float epsf = 0;
-    float epsx = 1;
-    //real_1d_array scale; scale.setlength(n); for (int i=0; i<n; i++) scale[i] = 1.0;
+    float epsf = s.min_improvement;
+    float epsx = 0;
     ae_int_t maxits = s.max_epochs;
     mincgstate state;
     mincgreport rep;
-    BFGS_ptr b(p, ratings, num_ratings, movie_gradient, user_gradient, s);
+    BFGS_ptr b(p, ratings, num_ratings, cv_ratings, num_cv_ratings, movie_gradient, user_gradient, s);
 
     mincgcreate(n, x, state);
-    //mincgsetscale(state, scale);
     mincgsetcond(state, epsg, epsf, epsx, maxits);
     mincgsetxrep(state, true);
     cout << "Optimizing.." << flush;
@@ -183,7 +183,7 @@ void bfgs_grad(const real_1d_array &x, double &f, real_1d_array &grad, void *p) 
     int n = x.length();
     for (int i=0; i<n; i++)
         b->predictor.movie_features[i] = x[i];
-    f = compute_gradient(b->predictor, b->ratings, b->num_ratings, 
+    f = compute_gradient(b->predictor, b->ratings, b->num_ratings, b->cv_ratings, b->num_cv_ratings,
             b->movie_gradient, b->user_gradient, b->settings.K);
     for (int i=0; i<n; i++)
         grad[i] = b->movie_gradient[i];
@@ -195,6 +195,28 @@ void bfgs_callback(const real_1d_array &x, double f, void *p) {
     time(&end); 
     printf("\n%3d %9.6f %5ds ", i, f, (int)difftime(end, start));
     cout << flush;
+    BFGS_ptr *b = (BFGS_ptr *)p;
+    cout << "cv: " << cost(b->predictor, b->cv_ratings, b->num_cv_ratings);
+}
+
+double cost(Predictor& p, Data *ratings, int num_ratings) {
+    double sq = 0;
+    #pragma omp parallel reduction(+: sq)
+    {
+        double err, lcl_sq = 0;
+        int user, movie;
+        Data *rating;
+        #pragma omp for
+        for (int i=0; i<num_ratings; i++) {
+            rating = ratings + i;
+            movie = rating->movie;
+            user = rating->user;
+            err = p.predict(user, movie) - (double)rating->rating;
+            lcl_sq += err*err;
+        }
+        sq += lcl_sq;
+    }
+    return sqrt(sq/num_ratings);
 }
 
 // non-BLAS versions of linear algebra

@@ -20,26 +20,29 @@ struct Settings {
 };
 
 struct BFGS_ptr {
-    BFGS_ptr(Predictor& p, Data *r, int n, float *mg, float *ug, Settings s):
-            predictor(p), ratings(r), num_ratings(n), movie_gradient(mg),
-            user_gradient(ug), settings(s) {}
+    BFGS_ptr(Predictor& p, Data *r, int n, Data *rcv, int ncv, float *mg, float *ug, Settings s):
+            predictor(p), ratings(r), num_ratings(n), cv_ratings(rcv), num_cv_ratings(ncv), 
+            movie_gradient(mg), user_gradient(ug), settings(s) {}
 
     Predictor& predictor;
     Data *ratings;
     int num_ratings;
+    Data *cv_ratings;
+    int num_cv_ratings;
     float *movie_gradient;
     float *user_gradient;
     Settings settings;
 };
 
-void sgd(Predictor& p, Data *ratings, int num_ratings, Settings s);
-void gd(Predictor& p, Data *ratings, int num_ratings, Settings s);
-float compute_gradient(Predictor& p, Data *ratings, int num_ratings, 
+void sgd(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, Settings s);
+//void gd(Predictor& p, Data *ratings, int num_ratings, Settings s);
+float compute_gradient(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, 
         float *movie_gradient, float *user_gradient, float K);
 
-void bfgs(Predictor& p, Data *ratings, int num_ratings, Settings s);
+void bfgs(Predictor& p, Data *ratings, int num_ratings, Data *cv_ratings, int num_cv_ratings, Settings s);
 using namespace alglib;
 void bfgs_grad(const real_1d_array &x, double &f, real_1d_array &grad, void *p);
 void bfgs_callback(const real_1d_array &x, double f, void *p);
+double cost(Predictor& p, Data *ratings, int num_ratings);
 
 #endif
